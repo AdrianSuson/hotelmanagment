@@ -80,18 +80,37 @@ const StayRecordsTable = ({
             0
           );
 
+          const checkIn = dayjs(stayRecord.check_in);
+          const checkOut = dayjs(stayRecord.check_out);
+          const currentDate = dayjs();
+
+          // Calculate the total rate
           const totalRate = calculateTotalRate(
-            dayjs(stayRecord.check_in),
-            dayjs(stayRecord.check_out),
+            checkIn,
+            checkOut,
             stayRecord.roomRate,
             serviceRate
           );
 
+          // Check if the current date is past the checkout date
+          if (
+            currentDate.isAfter(checkOut) &&
+            stayRecord.status_code_id !== 12
+          ) {
+            // Update the status_code_id to 12
+            await axios.put(
+              `${config.API_URL}/rooms/${stayRecord.room_id}/status`,
+              {
+                status_code_id: 12,
+              }
+            );
+          }
+
           return {
             id: stayRecord.id,
             ...stayRecord,
-            check_in: dayjs(stayRecord.check_in).format("YYYY-MM-DD"),
-            check_out: dayjs(stayRecord.check_out).format("YYYY-MM-DD"),
+            check_in: checkIn.format("YYYY-MM-DD"),
+            check_out: checkOut.format("YYYY-MM-DD"),
             serviceRate,
             totalRate,
             status: stayRecord.status,
@@ -342,10 +361,14 @@ const StayRecordsTable = ({
     const checkOut = dayjs(checkOutDate);
     const currentDate = dayjs();
 
-    let extraDays = currentDate.isAfter(checkOut) ? 1 : 0;
+    // Calculate the number of nights stayed, ensuring at least 1 day is counted
+    let numberOfDays = checkOut.diff(checkIn, "day");
+    numberOfDays = numberOfDays === 0 ? 1 : numberOfDays;
 
-    const numberOfDays = checkOut.diff(checkIn, "day");
+    // Add an extra day if the current date is past the checkout date
+    const extraDays = currentDate.isAfter(checkOut) ? 1 : 0;
 
+    // Calculate the total rate
     return (numberOfDays + extraDays) * roomRate + additionalServicesCharges;
   };
 
