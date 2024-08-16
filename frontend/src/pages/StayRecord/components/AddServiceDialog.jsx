@@ -7,16 +7,17 @@ import {
   FormHelperText,
   List,
   ListItem,
-  ListItemText,
   Typography,
   Fade,
   MenuItem,
   Select,
   InputLabel,
+  IconButton,
 } from "@mui/material";
 import PropTypes from "prop-types";
 import axios from "axios";
 import { useTheme } from "@mui/material/styles";
+import DeleteIcon from "@mui/icons-material/Delete";
 import config from "../../../state/config";
 import { FormSectionArray } from "../../../components/FormSection";
 
@@ -27,6 +28,7 @@ const AddServiceDialog = ({
   showSnackbar,
   userId,
   logUserAction,
+  fetchStayRecords,
 }) => {
   const theme = useTheme();
   const [serviceList, setServiceList] = useState([]);
@@ -86,12 +88,20 @@ const AddServiceDialog = ({
         {
           service_list_id: selectedServiceId,
           price: selectedService.base_price,
+          name: selectedService.name,
         }
       );
-      setServices((prevServices) => [...prevServices, response.data.service]);
+
+      const newService = {
+        ...response.data.service,
+        name: selectedService.name, 
+      };
+
+      setServices((prevServices) => [...prevServices, newService]);
       setSelectedServiceId("");
       setError("");
       showSnackbar("Service added successfully", "success");
+      fetchStayRecords();
       logUserAction(
         userId,
         `Added service '${selectedService.name}' to stay record ID: ${stayRecordId}`
@@ -100,6 +110,27 @@ const AddServiceDialog = ({
       console.error("Failed to add service:", error);
       setError("Failed to add service. Please try again.");
       showSnackbar("Failed to add service. Please try again.", "error");
+    }
+  };
+
+  const handleDeleteService = async (serviceId) => {
+    try {
+      await axios.delete(
+        `${config.API_URL}/stay_records/${stayRecordId}/services/${serviceId}`
+      );
+      setServices((prevServices) =>
+        prevServices.filter((service) => service.id !== serviceId)
+      );
+      showSnackbar("Service removed successfully", "success");
+      fetchStayRecords();
+      logUserAction(
+        userId,
+        `Removed service ID: ${serviceId} from stay record ID: ${stayRecordId}`
+      );
+    } catch (error) {
+      console.error("Failed to remove service:", error);
+      setError("Failed to remove service. Please try again.");
+      showSnackbar("Failed to remove service. Please try again.", "error");
     }
   };
 
@@ -189,18 +220,39 @@ const AddServiceDialog = ({
             }}
           >
             <List>
-              {services.slice(0, 3).map((service) => (
-                <ListItem key={service.id}>
-                  <ListItemText
-                    primary={service.name}
-                    secondary={`₱${parseFloat(service.price || 0).toFixed(2)}`}
-                    primaryTypographyProps={{
-                      style: { color: theme.palette.primary[900] },
+              {services.map((service) => (
+                <ListItem
+                  key={service.id}
+                  secondaryAction={
+                    <IconButton
+                      edge="end"
+                      aria-label="delete"
+                      onClick={() => handleDeleteService(service.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  }
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
                     }}
-                    secondaryTypographyProps={{
-                      style: { color: theme.palette.primary[900] },
-                    }}
-                  />
+                  >
+                    <Typography
+                      variant="body1"
+                      sx={{ color: theme.palette.primary[900] }}
+                    >
+                      {service.name}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ color: theme.palette.text.secondary }}
+                    >
+                      ₱{parseFloat(service.price || 0).toFixed(2)}
+                    </Typography>
+                  </Box>
                 </ListItem>
               ))}
             </List>
@@ -250,6 +302,7 @@ AddServiceDialog.propTypes = {
   showSnackbar: PropTypes.func.isRequired,
   logUserAction: PropTypes.func.isRequired,
   userId: PropTypes.string.isRequired,
+  fetchStayRecords: PropTypes.func.isRequired,
 };
 
 export default AddServiceDialog;

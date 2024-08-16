@@ -47,9 +47,12 @@ const validationSchema = yup.object({
       /^[a-zA-Z. ]+$/,
       "Last name should only contain letters, spaces, and periods"
     ),
-    phoneNumber: yup
+  phoneNumber: yup
     .string()
-    .matches(/^0[0-9\s]*$/, "Phone number must start with 0 and contain only digits")
+    .matches(
+      /^0[0-9\s]*$/,
+      "Phone number must start with 0 and contain only digits"
+    )
     .min(10, "Phone number should be at least 10 digits")
     .max(15, "Phone number should not exceed 15 digits")
     .required("Phone number is required"),
@@ -176,7 +179,7 @@ const NewStayRecordDialog = ({
         }
 
         const response = await axios.post(
-          `${config.API_URL}/makeStayRecord`,
+          `${config.API_URL}/makeNewStayRecord`,
           formData,
           {
             headers: {
@@ -219,13 +222,38 @@ const NewStayRecordDialog = ({
 
   const handleNextGuestInfo = async () => {
     const guestInfoErrors = await formik.validateForm();
+
     if (
       !guestInfoErrors.firstName &&
       !guestInfoErrors.lastName &&
       !guestInfoErrors.phoneNumber &&
       !guestInfoErrors.email
     ) {
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
+      try {
+        // Check if the email already exists
+        const response = await axios.post(`${config.API_URL}/checkEmail`, {
+          email: formik.values.email,
+        });
+
+        if (response.data.exists) {
+          formik.setFieldError(
+            "email",
+            "Email is already registered. Please use a different email."
+          );
+          showSnackbar(
+            "Email is already registered. Please use a different email.",
+            "error"
+          );
+        } else {
+          setActiveStep((prevActiveStep) => prevActiveStep + 1);
+        }
+      } catch (error) {
+        console.error("Error checking email:", error);
+        showSnackbar(
+          "An error occurred while checking the email. Please try again.",
+          "error"
+        );
+      }
     } else {
       formik.setTouched({
         firstName: true,

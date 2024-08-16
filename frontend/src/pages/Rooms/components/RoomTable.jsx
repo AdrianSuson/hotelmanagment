@@ -52,7 +52,7 @@ const RoomTable = ({
   }, []);
 
   useEffect(() => {
-    console.log("Rooms updated:", initialRooms); // Debugging log
+    console.log("Rooms updated:", initialRooms);
     setRooms(initialRooms);
   }, [initialRooms]);
 
@@ -362,6 +362,7 @@ const RoomTable = ({
             room={selectedRoom}
             roomTypes={roomTypes}
             statusOptions={statusOptions}
+            defaultRoomStatus={defaultRoomStatus}
             onClose={() => handleDialogClose("roomDetails")}
             onSave={handleSave}
             onDelete={() => handleDelete(selectedRoom.id)}

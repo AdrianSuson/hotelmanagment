@@ -9,6 +9,7 @@ import {
 } from "@mui/material";
 import PropTypes from "prop-types";
 import config from "../../../state/config";
+import dayjs from "dayjs";
 
 const GuestDetailsModal = ({
   open,
@@ -24,8 +25,30 @@ const GuestDetailsModal = ({
     return null;
   }
 
-  const totalAmount =
-    parseFloat(record.roomRate) + parseFloat(record.total_service_charges);
+  // Calculate the stay duration in days
+  const stayDuration = Math.max(
+    dayjs(record.check_out).diff(dayjs(record.check_in), "day"),
+    1
+  );
+
+  // Calculate the total room rate based on the stay duration
+  const roomRate = parseFloat(record.roomRate) || 0;
+  const totalRoomRate = roomRate * stayDuration;
+
+  // Calculate overtime charges
+  const isOvertime = dayjs(record.payment_date).isAfter(
+    dayjs(record.check_out).endOf("day")
+  );
+  const overtimeDays = isOvertime
+    ? dayjs(record.payment_date).diff(dayjs(record.check_out), "day")
+    : 0;
+  const overtimeCharges = overtimeDays * roomRate;
+
+  // Calculate the total amount including overtime charges
+  const serviceCharges = parseFloat(record.total_service_charges) || 0;
+  const totalAmount = totalRoomRate + serviceCharges + overtimeCharges;
+
+  const formattedPaymentDate = dayjs(record.payment_date).format("YYYY-MM-DD");
 
   const handlePrint = () => {
     const printContent = `
@@ -39,7 +62,9 @@ const GuestDetailsModal = ({
           <h3 style="color: ${theme.palette.primary[900]};">Guest Details</h3>
         </div>
         <hr>
-        <h3 style="color: ${theme.palette.text.primary};">Personal Information</h3>
+        <h3 style="color: ${
+          theme.palette.text.primary
+        };">Personal Information</h3>
         <p><strong>Name:</strong> ${record.guestName}</p>
         <p><strong>Email:</strong> ${record.guestEmail}</p>
         <p><strong>Phone:</strong> ${record.guestPhone}</p>
@@ -47,20 +72,51 @@ const GuestDetailsModal = ({
         <h3 style="color: ${theme.palette.text.primary};">Room Details</h3>
         <p><strong>Room Number:</strong> ${record.room_number}</p>
         <p><strong>Room Type:</strong> ${record.roomTypeName}</p>
+        <p><strong>Stay Duration:</strong> ${stayDuration} day(s)</p>
         <hr>
         <h3 style="color: ${theme.palette.text.primary};">Stay Information</h3>
         <p><strong>Check In:</strong> ${record.check_in}</p>
-        <p><strong>Check Out:</strong> ${record.check_out}</p>
+        <p><strong>Check Out:</strong> ${record.check_out} ${
+      isOvertime
+        ? `<strong style="color: red;">(Overtime: ${formattedPaymentDate})</strong>`
+        : ""
+    }</p>
         <p><strong>Number of Guests:</strong> ${record.guestNumber}</p>
         <p><strong>Adults:</strong> ${record.adults}</p>
         <p><strong>Kids:</strong> ${record.kids}</p>
+        ${
+          isOvertime
+            ? `<p><strong style="color: red;">Overtime:</strong> ${overtimeDays} extra day(s) charged at ₱${roomRate.toFixed(
+                2
+              )} per day.</p>`
+            : ""
+        }
         <hr>
-        <h3 style="color: ${theme.palette.text.primary};">Payment Information</h3>
-        <p><strong>Room Rate:</strong> ${record.roomRate}</p>
-        <p><strong>Service Charges:</strong> ${record.total_service_charges}</p>
-        <p><strong>Total Amount:</strong> ${totalAmount}</p>
-        <p><strong>Discount:</strong> ${record.discount_percentage}% (${record.discount_name})</p>
-        <p><strong>Amount Paid:</strong> ${record.amount_paid}</p>
+        <h3 style="color: ${
+          theme.palette.text.primary
+        };">Payment Information</h3>
+        <p><strong>Room Rate:</strong> ₱${roomRate.toFixed(
+          2
+        )} x ${stayDuration} day(s) = ₱${totalRoomRate.toFixed(2)}</p>
+        ${
+          isOvertime
+            ? `<p><strong>Overtime Charges:</strong> ₱${overtimeCharges.toFixed(
+                2
+              )} (${overtimeDays} day(s))</p>`
+            : ""
+        }
+        <p><strong>Service Charges:</strong> ${
+          serviceCharges > 0 ? `₱${serviceCharges.toFixed(2)}` : "None"
+        }</p>
+        <p><strong>Total Amount:</strong> ₱${totalAmount.toFixed(2)}</p>
+        <p><strong>Discount:</strong> ${
+          record.discount_percentage && record.discount_name
+            ? `${record.discount_percentage}% (${record.discount_name})`
+            : "None"
+        }</p>
+        <p><strong>Amount Paid:</strong> ₱${parseFloat(
+          record.amount_paid || 0
+        ).toFixed(2)}</p>
       </div>
     `;
 
@@ -106,7 +162,7 @@ const GuestDetailsModal = ({
           <img
             src={`${config.API_URL}/id_picture/${record.guestIdPicture}` || ""}
             alt="Profile Picture"
-            style={{ width: 250 }}
+            style={{ width: 150 }}
           />
         </Box>
 
@@ -171,6 +227,13 @@ const GuestDetailsModal = ({
             >
               <strong>Room Type:</strong> {record.roomTypeName}
             </Typography>
+            <Typography
+              variant="body1"
+              sx={{ color: theme.palette.text.primary, mb: 0.5 }}
+            >
+              <strong>Stay Duration:</strong> {stayDuration} day(s)
+              {isOvertime && <span> + {overtimeDays} extra day(s)</span>}
+            </Typography>
           </Grid>
 
           <Grid item xs={12} sm={6}>
@@ -191,7 +254,12 @@ const GuestDetailsModal = ({
               variant="body1"
               sx={{ color: theme.palette.text.primary, mb: 0.5 }}
             >
-              <strong>Check Out:</strong> {record.check_out}
+              <strong>Check Out:</strong> {record.check_out}{" "}
+              {isOvertime && (
+                <strong style={{ color: "red", mb: 0.5 }}>
+                  (Overtime: {formattedPaymentDate})
+                </strong>
+              )}
             </Typography>
             <Typography
               variant="body1"
@@ -225,32 +293,46 @@ const GuestDetailsModal = ({
               variant="body1"
               sx={{ color: theme.palette.text.primary, mb: 0.5 }}
             >
-              <strong>Room Rate:</strong> {record.roomRate}
+              <strong>Room Rate:</strong> ₱{roomRate.toFixed(2)} x{" "}
+              {stayDuration} day(s) = ₱{totalRoomRate.toFixed(2)}
+            </Typography>
+            {isOvertime && (
+              <Typography
+                variant="body1"
+                sx={{ color: theme.palette.text.primary, mb: 0.5 }}
+              >
+                <strong>Overtime Charges:</strong> ₱{overtimeCharges.toFixed(2)}{" "}
+                ({overtimeDays} day(s))
+              </Typography>
+            )}
+            <Typography
+              variant="body1"
+              sx={{ color: theme.palette.text.primary, mb: 0.5 }}
+            >
+              <strong>Service Charges:</strong>{" "}
+              {serviceCharges > 0 ? `₱${serviceCharges.toFixed(2)}` : "None"}
             </Typography>
             <Typography
               variant="body1"
               sx={{ color: theme.palette.text.primary, mb: 0.5 }}
             >
-              <strong>Service Charges:</strong> {record.total_service_charges}
+              <strong>Total Amount:</strong> ₱{totalAmount.toFixed(2)}
             </Typography>
             <Typography
               variant="body1"
               sx={{ color: theme.palette.text.primary, mb: 0.5 }}
             >
-              <strong>Total Amount:</strong> {totalAmount}
+              <strong>Discount:</strong>{" "}
+              {record.discount_percentage && record.discount_name
+                ? `${record.discount_percentage}% (${record.discount_name})`
+                : "None"}
             </Typography>
             <Typography
               variant="body1"
               sx={{ color: theme.palette.text.primary, mb: 0.5 }}
             >
-              <strong>Discount:</strong> {record.discount_percentage}% (
-              {record.discount_name})
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{ color: theme.palette.text.primary, mb: 0.5 }}
-            >
-              <strong>Amount Paid:</strong> {record.amount_paid}
+              <strong>Amount Paid:</strong> ₱
+              {parseFloat(record.amount_paid || 0).toFixed(2)}
             </Typography>
           </Grid>
         </Grid>
@@ -293,6 +375,7 @@ GuestDetailsModal.propTypes = {
     status: PropTypes.string,
     check_in: PropTypes.string,
     check_out: PropTypes.string,
+    payment_date: PropTypes.string,
     adults: PropTypes.number,
     kids: PropTypes.number,
     guestNumber: PropTypes.number,

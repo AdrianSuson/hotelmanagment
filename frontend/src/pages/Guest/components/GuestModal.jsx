@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Button,
   Dialog,
@@ -9,6 +9,7 @@ import {
   Grid,
   Box,
   Alert,
+  CircularProgress,
 } from "@mui/material";
 import PropTypes from "prop-types";
 import axios from "axios";
@@ -28,80 +29,124 @@ const GuestModal = ({
   LogUserId,
 }) => {
   const [previewUrl, setPreviewUrl] = useState("");
-  const [isStayRecordFormOpen, setIsStayRecordFormOpen] = useState(false);
-  const [isReservationFormOpen, setIsReservationFormOpen] = useState(false);
-  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [status, setStatus] = useState({
+    isStayRecordFormOpen: false,
+    isReservationFormOpen: false,
+    isHistoryDialogOpen: false,
+    isLoading: true,
+    error: null,
+  });
   const [hasStayRecord, setHasStayRecord] = useState(false);
   const [hasReservation, setHasReservation] = useState(false);
 
-  useEffect(() => {
-    if (guest && guest.id_picture) {
-      setPreviewUrl(`${config.API_URL}/id_picture/${guest.id_picture}`);
-    }
-  }, [guest]);
+  const resetStates = () => {
+    setPreviewUrl("");
+    setStatus({
+      isStayRecordFormOpen: false,
+      isReservationFormOpen: false,
+      isHistoryDialogOpen: false,
+      isLoading: true,
+      error: null,
+    });
+    setHasStayRecord(false);
+    setHasReservation(false);
+  };
 
-  useEffect(() => {
-    const fetchStayRecords = async () => {
-      try {
-        const response = await axios.get(
-          `${config.API_URL}/stay_records/guest/${guest.id}`
+  const fetchGuestData = useCallback(async () => {
+    try {
+      setStatus((prevStatus) => ({
+        ...prevStatus,
+        isLoading: true,
+        error: null,
+      }));
+
+      const [stayRecordsResponse, reservationsResponse, guestResponse] =
+        await Promise.all([
+          axios.get(`${config.API_URL}/stay_records/guest/${guest.id}`),
+          axios.get(`${config.API_URL}/reservations/guest/${guest.id}`),
+          axios.get(`${config.API_URL}/guests/${guest.id}`),
+        ]);
+
+      if (guestResponse.data.success) {
+        const updatedGuest = guestResponse.data.guest;
+        setPreviewUrl(
+          `${config.API_URL}/id_picture/${updatedGuest.id_picture}`
         );
-        if (response.data.success && response.data.stay_records.length > 0) {
-          setHasStayRecord(true);
-        } else {
-          setHasStayRecord(false);
-        }
-      } catch (error) {
-        console.error("Error fetching stay records:", error);
-        showSnackbar("Failed to fetch stay records.", "error");
+      } else {
+        throw new Error("Failed to fetch guest data.");
       }
-    };
 
-    const fetchReservations = async () => {
-      try {
-        const response = await axios.get(
-          `${config.API_URL}/reservations/guest/${guest.id}`
-        );
-        if (response.data.success && response.data.reservations.length > 0) {
-          setHasReservation(true);
-        } else {
-          setHasReservation(false);
-        }
-      } catch (error) {
-        console.error("Error fetching reservations:", error);
-        showSnackbar("Failed to fetch reservations.", "error");
-      }
-    };
+      setHasStayRecord(
+        stayRecordsResponse.data.success &&
+          stayRecordsResponse.data.stay_records.length > 0
+      );
+      setHasReservation(
+        reservationsResponse.data.success &&
+          reservationsResponse.data.reservations.length > 0
+      );
 
-    if (guest && guest.id) {
-      fetchStayRecords();
-      fetchReservations();
+      setStatus((prevStatus) => ({ ...prevStatus, isLoading: false }));
+    } catch (error) {
+      console.error("Error fetching guest data:", error);
+      showSnackbar("Failed to fetch guest data.", "error");
+      setStatus((prevStatus) => ({ ...prevStatus, isLoading: false, error }));
     }
-  }, [guest, showSnackbar]);
+  }, [guest.id, showSnackbar]);
 
-  const handleOpenStayRecordForm = () => {
-    setIsStayRecordFormOpen(true);
-  };
+  useEffect(() => {
+    if (open) {
+      resetStates();
+      if (guest && guest.id) {
+        fetchGuestData();
+      }
+    }
+  }, [open, guest, fetchGuestData]);
 
-  const handleOpenReservationForm = () => {
-    setIsReservationFormOpen(true);
-  };
+  const handleDialogToggle = useCallback(
+    (dialog, isOpen) => {
+      setStatus((prevStatus) => ({
+        ...prevStatus,
+        [dialog]: isOpen,
+      }));
+      if (!isOpen) {
+        fetchGuestData();
+      }
+    },
+    [fetchGuestData]
+  );
 
-  const handleCloseStayRecordForm = () => {
-    setIsStayRecordFormOpen(false);
-  };
+  // Memoize the loading state to avoid unnecessary re-renders
+  const isDataLoading = useMemo(() => status.isLoading, [status.isLoading]);
 
-  const handleCloseReservationForm = () => {
-    setIsReservationFormOpen(false);
-  };
+  if (isDataLoading) {
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogContent sx={{ textAlign: "center" }}>
+          <CircularProgress />
+          <Typography variant="body2" sx={{ mt: 2 }}>
+            Loading guest information...
+          </Typography>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
-  const handleOpenHistoryDialog = () => {
-    setIsHistoryDialogOpen(true);
-  };
-
-  const handleCloseHistoryDialog = () => {
-    setIsHistoryDialogOpen(false);
-  };
+  if (!guest || status.error) {
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogContent sx={{ textAlign: "center" }}>
+          <Alert severity="error">
+            {status.error ? status.error.message : "Failed to load guest data."}
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} color="secondary" variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
 
   return (
     <>
@@ -158,14 +203,18 @@ const GuestModal = ({
                 <Button
                   variant="contained"
                   color="primary"
-                  onClick={handleOpenReservationForm}
+                  onClick={() =>
+                    handleDialogToggle("isReservationFormOpen", true)
+                  }
                 >
                   Reservation
                 </Button>
                 <Button
                   variant="contained"
                   color="primary"
-                  onClick={handleOpenStayRecordForm}
+                  onClick={() =>
+                    handleDialogToggle("isStayRecordFormOpen", true)
+                  }
                 >
                   Check-in
                 </Button>
@@ -174,7 +223,7 @@ const GuestModal = ({
             <Button
               variant="contained"
               color="primary"
-              onClick={handleOpenHistoryDialog}
+              onClick={() => handleDialogToggle("isHistoryDialogOpen", true)}
             >
               View History
             </Button>
@@ -187,8 +236,8 @@ const GuestModal = ({
         </DialogActions>
       </Dialog>
       <NewStayRecordForm
-        open={isStayRecordFormOpen}
-        onClose={handleCloseStayRecordForm}
+        open={status.isStayRecordFormOpen}
+        onClose={() => handleDialogToggle("isStayRecordFormOpen", false)}
         roomStatus={roomStatus}
         roomSelection={roomSelection}
         initialGuestData={guest}
@@ -197,8 +246,8 @@ const GuestModal = ({
         LogUserId={LogUserId}
       />
       <NewReservationForm
-        open={isReservationFormOpen}
-        onClose={handleCloseReservationForm}
+        open={status.isReservationFormOpen}
+        onClose={() => handleDialogToggle("isReservationFormOpen", false)}
         roomStatus={roomStatus}
         roomSelection={roomSelection}
         initialGuestData={guest}
@@ -208,8 +257,8 @@ const GuestModal = ({
       />
       {guest && guest.id && (
         <HistoryDialog
-          open={isHistoryDialogOpen}
-          onClose={handleCloseHistoryDialog}
+          open={status.isHistoryDialogOpen}
+          onClose={() => handleDialogToggle("isHistoryDialogOpen", false)}
           guestId={guest.id}
           showSnackbar={showSnackbar}
         />

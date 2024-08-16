@@ -1,6 +1,7 @@
 import express from "express";
 import db from "../config/db.js";
 import path from "path";
+import fs from "fs";
 import multer from "multer";
 import { fileURLToPath } from "url";
 
@@ -26,6 +27,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+// Route to create or update a reservation
 router.post(
   "/makeReservation",
   upload.single("id_picture"),
@@ -41,25 +43,94 @@ router.post(
       adults,
       kids,
     } = req.body;
-    const id_picture = req.file ? req.file.filename : null;
+    const file = req.file;
 
     try {
       // Check if the email already exists
       const [existingGuest] = await db.query(
-        "SELECT id FROM guests WHERE email = ?",
+        "SELECT id, id_picture FROM guests WHERE email = ?",
         [email]
       );
 
       let guestId;
+      let oldImageFilename = null;
 
       if (existingGuest.length > 0) {
-        // If guest exists, use the existing guest ID
+        // Use the existing guest's ID and update their information
         guestId = existingGuest[0].id;
+        oldImageFilename = existingGuest[0].id_picture;
+
+        const updateFields = [];
+        const updateValues = [];
+
+        if (firstName) {
+          updateFields.push("first_name = ?");
+          updateValues.push(firstName);
+        }
+
+        if (lastName) {
+          updateFields.push("last_name = ?");
+          updateValues.push(lastName);
+        }
+
+        if (phoneNumber) {
+          updateFields.push("phone = ?");
+          updateValues.push(phoneNumber);
+        }
+
+        if (file && file.filename !== oldImageFilename) {
+          updateFields.push("id_picture = ?");
+          updateValues.push(file.filename);
+        }
+
+        if (updateFields.length > 0) {
+          updateValues.push(guestId);
+          await db.query(
+            `UPDATE guests SET ${updateFields.join(", ")} WHERE id = ?`,
+            updateValues
+          );
+        }
+
+        // If a new image was uploaded, delete the old image file
+        if (file && oldImageFilename && file.filename !== oldImageFilename) {
+          const oldImagePath = path.join(
+            __dirname,
+            "..",
+            "..",
+            "assets",
+            "id_pictures",
+            oldImageFilename
+          );
+          fs.unlink(oldImagePath, (err) => {
+            if (err) {
+              console.error("Failed to delete old ID picture:", err);
+            } else {
+              console.log(
+                "Old ID picture deleted successfully:",
+                oldImageFilename
+              );
+            }
+          });
+        }
       } else {
         // Insert the new guest
+        const guestFields = [firstName, lastName, email, phoneNumber];
+        let guestValues = "(first_name, last_name, email, phone";
+
+        if (file) {
+          guestFields.push(file.filename);
+          guestValues += ", id_picture";
+        }
+
+        guestValues += ") VALUES (?, ?, ?, ?";
+        if (file) {
+          guestValues += ", ?";
+        }
+        guestValues += ")";
+
         const [guestResult] = await db.query(
-          "INSERT INTO guests (first_name, last_name, email, phone, id_picture) VALUES (?, ?, ?, ?, ?)",
-          [firstName, lastName, email, phoneNumber, id_picture]
+          `INSERT INTO guests ${guestValues}`,
+          guestFields
         );
 
         if (!guestResult.insertId) {
@@ -97,6 +168,100 @@ router.post(
 );
 
 router.post(
+  "/makeNewReservation",
+  upload.single("id_picture"),
+  async (req, res) => {
+    const {
+      firstName,
+      lastName,
+      email,
+      phoneNumber,
+      room_id,
+      check_in,
+      check_out,
+      adults,
+      kids,
+    } = req.body;
+    const id_picture = req.file ? req.file.filename : null;
+
+    try {
+      // Check if the email already exists
+      const [existingGuest] = await db.query(
+        "SELECT id FROM guests WHERE email = ?",
+        [email]
+      );
+
+      if (existingGuest.length > 0) {
+        // If the email is already registered, return an error
+        return res.status(400).json({
+          success: false,
+          message: "Email is already registered. Please use a different email.",
+        });
+      }
+
+      // Insert the new guest
+      const [guestResult] = await db.query(
+        "INSERT INTO guests (first_name, last_name, email, phone, id_picture) VALUES (?, ?, ?, ?, ?)",
+        [firstName, lastName, email, phoneNumber, id_picture]
+      );
+
+      if (!guestResult.insertId) {
+        throw new Error("Failed to create guest.");
+      }
+
+      const guestId = guestResult.insertId;
+
+      // Create a reservation using the new guest ID
+      const parsedCheckIn = new Date(check_in);
+      const parsedCheckOut = new Date(check_out);
+      const [reservationResult] = await db.query(
+        "INSERT INTO reservations (room_id, guest_id, check_in, check_out, adults, kids) VALUES (?, ?, ?, ?, ?, ?)",
+        [room_id, guestId, parsedCheckIn, parsedCheckOut, adults, kids]
+      );
+
+      if (!reservationResult.insertId) {
+        throw new Error("Failed to create reservation.");
+      }
+
+      res.json({
+        success: true,
+        message: "Reservation created successfully.",
+        reservationId: reservationResult.insertId,
+      });
+    } catch (error) {
+      console.error("Reservation Error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Server error occurred while creating reservation.",
+      });
+    }
+  }
+);
+
+router.post("/checkEmail", async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const [existingGuest] = await db.query(
+      "SELECT id FROM guests WHERE email = ?",
+      [email]
+    );
+
+    if (existingGuest.length > 0) {
+      return res.json({ exists: true });
+    } else {
+      return res.json({ exists: false });
+    }
+  } catch (error) {
+    console.error("Error checking email:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error occurred while checking email.",
+    });
+  }
+});
+
+router.post(
   "/confirmReservation/:id",
   upload.single("id_picture"),
   async (req, res) => {
@@ -106,8 +271,8 @@ router.post(
     let connection;
 
     try {
-      connection = await db.getConnection(); // Get a connection from the pool
-      await connection.beginTransaction(); // Start transaction
+      connection = await db.getConnection();
+      await connection.beginTransaction();
 
       if (file) {
         const fileName = file.filename;
@@ -287,7 +452,6 @@ router.get("/reservations/guest/:guest_id", async (req, res) => {
   }
 });
 
-// Route to delete a reservation and the guest if they have no other reservations
 router.delete("/deleteReservation/:id", async (req, res) => {
   const reservationId = req.params.id;
   try {
@@ -323,14 +487,20 @@ router.delete("/deleteReservation/:id", async (req, res) => {
       [guestId]
     );
 
-    if (guestReservations.length === 0) {
-      // Delete the guest if they have no other reservations
+    // Check if the guest has any records in stay_records_history
+    const [guestHistory] = await db.query(
+      "SELECT id FROM stay_records_history WHERE guest_id = ?",
+      [guestId]
+    );
+
+    // Only delete the guest if they have no other reservations and no history records
+    if (guestReservations.length === 0 && guestHistory.length === 0) {
       await db.query("DELETE FROM guests WHERE id = ?", [guestId]);
     }
 
     res.json({
       success: true,
-      message: "Reservation and guest deleted successfully.",
+      message: "Reservation deleted successfully.",
     });
   } catch (error) {
     console.error("Error deleting reservation:", error);

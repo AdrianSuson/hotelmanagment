@@ -141,17 +141,20 @@ const ReservationForm = ({
     validationSchema: validationSchema,
     onSubmit: async (values) => {
       try {
-        const response = await axios.post(`${config.API_URL}/makeReservation`, {
-          firstName: values.firstName,
-          lastName: values.lastName,
-          email: values.email,
-          phoneNumber: values.phoneNumber,
-          room_id: values.room_id,
-          check_in: dayjs(values.checkInDate).format("YYYY-MM-DD"),
-          check_out: dayjs(values.checkOutDate).format("YYYY-MM-DD"),
-          adults: values.adults,
-          kids: values.kids,
-        });
+        const response = await axios.post(
+          `${config.API_URL}/makeNewReservation`,
+          {
+            firstName: values.firstName,
+            lastName: values.lastName,
+            email: values.email,
+            phoneNumber: values.phoneNumber,
+            room_id: values.room_id,
+            check_in: dayjs(values.checkInDate).format("YYYY-MM-DD"),
+            check_out: dayjs(values.checkOutDate).format("YYYY-MM-DD"),
+            adults: values.adults,
+            kids: values.kids,
+          }
+        );
 
         if (response.data.success) {
           showSnackbar("Reservation created successfully!", "success");
@@ -186,13 +189,38 @@ const ReservationForm = ({
 
   const handleNextGuestInfo = async () => {
     const guestInfoErrors = await formik.validateForm();
+
     if (
       !guestInfoErrors.firstName &&
       !guestInfoErrors.lastName &&
       !guestInfoErrors.phoneNumber &&
       !guestInfoErrors.email
     ) {
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
+      try {
+        // Check if the email already exists
+        const response = await axios.post(`${config.API_URL}/checkEmail`, {
+          email: formik.values.email,
+        });
+
+        if (response.data.exists) {
+          formik.setFieldError(
+            "email",
+            "Email is already registered. Please use a different email."
+          );
+          showSnackbar(
+            "Email is already registered. Please use a different email.",
+            "error"
+          );
+        } else {
+          setActiveStep((prevActiveStep) => prevActiveStep + 1);
+        }
+      } catch (error) {
+        console.error("Error checking email:", error);
+        showSnackbar(
+          "An error occurred while checking the email. Please try again.",
+          "error"
+        );
+      }
     } else {
       formik.setTouched({
         firstName: true,
@@ -244,7 +272,6 @@ const ReservationForm = ({
   const calculateTotalRate = (checkInDate, checkOutDate, roomRate) => {
     const checkIn = dayjs(checkInDate);
     const checkOut = dayjs(checkOutDate);
-    console.log(checkIn.isSame(checkOut));
     var numberOfDays;
     if (checkIn.isSame(checkOut)) numberOfDays = 1;
     else numberOfDays = checkOut.diff(checkIn, "day");

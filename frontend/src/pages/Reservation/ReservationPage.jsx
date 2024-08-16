@@ -17,6 +17,7 @@ import {
 import axios from "axios";
 import dayjs from "dayjs";
 import config from "../../state/config";
+import AddIcon from "@mui/icons-material/Add";
 import ReservationsTable from "./components/ReservationsTable";
 import ConfirmReservationDialog from "./components/ConfirmReservationDialog";
 import CustomSnackbar from "../../components/Snackbar/CustomSnackbar";
@@ -194,7 +195,12 @@ const ReservationPage = ({
           gridColumn="span 12"
           sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}
         >
-          <Button variant="contained" color="primary" onClick={toggleForm}>
+          <Button
+            startIcon={<AddIcon />}
+            variant="contained"
+            color="primary"
+            onClick={toggleForm}
+          >
             Reservation
           </Button>
         </Box>

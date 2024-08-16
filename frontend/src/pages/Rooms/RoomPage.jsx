@@ -27,7 +27,7 @@ const RoomPage = ({ logUserAction, defaultRoomStatus }) => {
   const fetchRooms = useCallback(async () => {
     try {
       const response = await axios.get(`${config.API_URL}/rooms`);
-      console.log("Rooms fetched:", response.data.rooms); // Debugging log
+      console.log("Rooms fetched:", response.data.rooms);
       setRooms(
         response.data.rooms.map((room) => ({
           ...room,

@@ -78,6 +78,7 @@ const GuestTable = ({
   const handleClose = () => {
     setSelectedGuest(null);
     setOpen(false);
+    fetchGuests()
   };
 
   const handleSearchChange = useCallback((event) => {

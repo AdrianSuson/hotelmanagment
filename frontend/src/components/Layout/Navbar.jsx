@@ -69,9 +69,11 @@ const Navbar = ({ navTitle, isMinimized, setIsMinimized }) => {
 
   // Conditionally append "Management" to the navTitle
   const displayTitle =
-    navTitle !== "Dashboard" &&
-    navTitle !== "Transaction History" &&
-    navTitle !== "Guest History"
+    navTitle === "Dashboard"
+      ? "Dashboard Overview"
+      : navTitle !== "Transaction History" &&
+        navTitle !== "Settings" &&
+        navTitle !== "Guest History"
       ? `${navTitle} Management`
       : navTitle;
 

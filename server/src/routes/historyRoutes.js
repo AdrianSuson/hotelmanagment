@@ -181,7 +181,7 @@ router.get("/stay_records_history/:id", async (req, res) => {
         stay_records_history.discount_percentage,
         stay_records_history.discount_name,
         stay_records_history.payment_method,
-        stay_records_history.payment_date,
+        stay_records_history.payment_date, 
         stay_records_history.adults + stay_records_history.kids AS guestNumber
       FROM stay_records_history
       JOIN guests ON stay_records_history.guest_id = guests.id
@@ -257,6 +257,33 @@ router.get("/stay_records/guest/:guestId/history", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error occurred while fetching stay records history.",
+    });
+  }
+});
+
+router.get("/room_usage", async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        rooms.room_number,
+        COUNT(stay_records_history.id) AS usage_count
+      FROM rooms
+      LEFT JOIN stay_records_history ON rooms.id = stay_records_history.room_id
+      GROUP BY rooms.room_number
+      ORDER BY usage_count DESC
+    `);
+
+    const formattedRows = rows.map((row) => ({
+      ...row,
+      usage_count: parseInt(row.usage_count, 10), 
+    }));
+
+    res.json({ success: true, room_usage: formattedRows });
+  } catch (error) {
+    console.error("Error fetching room usage data:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error occurred while fetching room usage data.",
     });
   }
 });

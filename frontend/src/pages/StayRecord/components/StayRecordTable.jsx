@@ -27,7 +27,7 @@ const StayRecordsTable = ({
   const isMediumOrLarger = useMediaQuery(theme.breakpoints.up("md"));
 
   const [stayRecords, setStayRecords] = useState(initialStayRecords);
-  const [openDialog, setOpenDialog] = useState(null); // To manage open dialogs
+  const [openDialog, setOpenDialog] = useState(null);
   const [selectedStayRecord, setSelectedStayRecord] = useState(null);
   const [selectedGuest, setSelectedGuest] = useState(null);
   const [rooms, setRooms] = useState([]);
@@ -81,30 +81,16 @@ const StayRecordsTable = ({
           );
 
           const checkIn = dayjs(stayRecord.check_in);
-          const checkOut = dayjs(stayRecord.check_out);
+          const checkOut = dayjs(stayRecord.check_out).endOf("day");
           const currentDate = dayjs();
 
-          // Calculate the total rate
           const totalRate = calculateTotalRate(
             checkIn,
             checkOut,
             stayRecord.roomRate,
-            serviceRate
+            serviceRate,
+            currentDate
           );
-
-          // Check if the current date is past the checkout date
-          if (
-            currentDate.isAfter(checkOut) &&
-            stayRecord.status_code_id !== 12
-          ) {
-            // Update the status_code_id to 12
-            await axios.put(
-              `${config.API_URL}/rooms/${stayRecord.room_id}/status`,
-              {
-                status_code_id: 12,
-              }
-            );
-          }
 
           return {
             id: stayRecord.id,
@@ -114,6 +100,9 @@ const StayRecordsTable = ({
             serviceRate,
             totalRate,
             status: stayRecord.status,
+            roomCharges: totalRate,
+            additionalServicesCharges: serviceRate,
+            totalAmount: totalRate,
           };
         })
       );
@@ -124,6 +113,23 @@ const StayRecordsTable = ({
       showSnackbar("Failed to fetch data. Please try again.", "error");
     }
   }, [showSnackbar]);
+
+  const calculateTotalRate = (
+    checkInDate,
+    checkOutDate,
+    roomRate,
+    additionalServicesCharges,
+    currentDate
+  ) => {
+    const checkIn = dayjs(checkInDate);
+    const checkOut = dayjs(checkOutDate);
+
+    let numberOfDays = checkOut.diff(checkIn, "day");
+    numberOfDays = numberOfDays <= 0 ? 1 : numberOfDays;
+    const extraDays = currentDate.isAfter(checkOut, "day") ? 1 : 0;
+
+    return (numberOfDays + extraDays) * roomRate + additionalServicesCharges;
+  };
 
   useEffect(() => {
     fetchRooms();
@@ -162,7 +168,7 @@ const StayRecordsTable = ({
     }
 
     if (dialogType === "guestUpdate" && record?.guest_id) {
-      fetchGuestData(record.guest_id); // Fetch guest data when opening guest update dialog
+      fetchGuestData(record.guest_id);
     } else {
       setOpenDialog(dialogType);
     }
@@ -216,7 +222,10 @@ const StayRecordsTable = ({
         }
       );
       showSnackbar("Dates updated successfully", "success");
-      fetchStayRecords();
+
+      // Ensure re-fetching the updated stay records after date change
+      await fetchStayRecords();
+
       logUserAction(
         userId,
         `Updated dates for stay record ID: ${selectedStayRecord.id}`
@@ -268,42 +277,23 @@ const StayRecordsTable = ({
     }
   };
 
-  const handleCheckout = async (checkIn) => {
+  const handleCheckout = (checkIn) => {
     setSelectedCheckIn(checkIn);
     setSelectedRoomId(checkIn.room_id);
-    try {
-      const checkInDate = dayjs(checkIn.check_in);
-      const checkOutDate = dayjs(checkIn.check_out);
-      let numberOfNights = checkOutDate.diff(checkInDate, "day");
 
-      if (numberOfNights === 0) {
-        numberOfNights = 1;
-      }
+    const { roomCharges, additionalServicesCharges, totalAmount, roomRate } =
+      checkIn;
 
-      const roomRate = checkIn.roomRate;
-      const roomCharges = numberOfNights * roomRate;
+    setBillDetails({
+      roomCharges,
+      additionalServicesCharges,
+      discount: 0,
+      totalAmount,
+      roomRate,
+    });
 
-      const { data: servicesData } = await axios.get(
-        `${config.API_URL}/stay_records/${checkIn.id}/services`
-      );
-      const additionalServicesCharges = servicesData.services.reduce(
-        (total, service) => total + parseFloat(service.price),
-        0
-      );
-
-      setBillDetails({
-        roomCharges,
-        additionalServicesCharges,
-        discount: 0,
-        totalAmount: roomCharges + additionalServicesCharges,
-      });
-
-      setOpenDialog("billing");
-      logUserAction(userId, `Checked out stay record ID: ${checkIn.id}`);
-    } catch (error) {
-      console.error("Error calculating bill:", error);
-      showSnackbar("Failed to calculate bill. Please try again.", "error");
-    }
+    setOpenDialog("billing");
+    logUserAction(userId, `Opened billing for stay record ID: ${checkIn.id}`);
   };
 
   const handleAddService = (service, charge) => {
@@ -320,7 +310,7 @@ const StayRecordsTable = ({
       (billDetails.roomCharges + billDetails.additionalServicesCharges) *
       (percentage / 100);
     const totalAmountAfterDiscount =
-      billDetails.roomCharges +
+      billDetails.roomRate +
       billDetails.additionalServicesCharges -
       discountAmount;
     setBillDetails((prevBillDetails) => ({
@@ -332,6 +322,16 @@ const StayRecordsTable = ({
 
   const handlePayment = async () => {
     try {
+      const currentDate = dayjs();
+      const checkOutDate = dayjs(selectedCheckIn.check_out);
+
+      if (currentDate.isAfter(checkOutDate)) {
+        await handleChangeRoomStatus(
+          selectedCheckIn.room_id,
+          roomStatusCheckOut
+        );
+      }
+
       await axios.post(
         `${config.API_URL}/stay_records/${selectedCheckIn.id}/payment`,
         {
@@ -351,27 +351,6 @@ const StayRecordsTable = ({
     }
   };
 
-  const calculateTotalRate = (
-    checkInDate,
-    checkOutDate,
-    roomRate,
-    additionalServicesCharges
-  ) => {
-    const checkIn = dayjs(checkInDate);
-    const checkOut = dayjs(checkOutDate);
-    const currentDate = dayjs();
-
-    // Calculate the number of nights stayed, ensuring at least 1 day is counted
-    let numberOfDays = checkOut.diff(checkIn, "day");
-    numberOfDays = numberOfDays === 0 ? 1 : numberOfDays;
-
-    // Add an extra day if the current date is past the checkout date
-    const extraDays = currentDate.isAfter(checkOut) ? 1 : 0;
-
-    // Calculate the total rate
-    return (numberOfDays + extraDays) * roomRate + additionalServicesCharges;
-  };
-
   const columns = [
     {
       field: "guestName",
@@ -380,16 +359,18 @@ const StayRecordsTable = ({
       headerAlign: "center",
       align: "center",
       renderCell: (params) => (
-        <Box
-          onClick={() => handleOpenDialog("guestUpdate", params.row)}
-          style={{
-            fontSize: "0.75rem",
-            cursor: "pointer",
-            color: theme.palette.primary[900],
-          }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="View Guest Info">
+          <Box
+            onClick={() => handleOpenDialog("guestUpdate", params.row)}
+            style={{
+              fontSize: "0.75rem",
+              cursor: "pointer",
+              color: theme.palette.primary[900],
+            }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -400,7 +381,6 @@ const StayRecordsTable = ({
       align: "center",
       renderCell: (params) => (
         <Box
-          onClick={() => handleOpenDialog("roomUpdate", params.row)}
           style={{
             fontSize: "0.75rem",
             cursor: "pointer",
@@ -418,16 +398,18 @@ const StayRecordsTable = ({
       headerAlign: "center",
       align: "center",
       renderCell: (params) => (
-        <Box
-          onClick={() => handleOpenDialog("dateUpdate", params.row)}
-          style={{
-            fontSize: "0.75rem",
-            cursor: "pointer",
-            color: theme.palette.primary[900],
-          }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Update check-in">
+          <Box
+            onClick={() => handleOpenDialog("dateUpdate", params.row)}
+            style={{
+              fontSize: "0.75rem",
+              cursor: "pointer",
+              color: theme.palette.primary[900],
+            }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -437,16 +419,18 @@ const StayRecordsTable = ({
       headerAlign: "center",
       align: "center",
       renderCell: (params) => (
-        <Box
-          onClick={() => handleOpenDialog("dateUpdate", params.row)}
-          style={{
-            fontSize: "0.75rem",
-            cursor: "pointer",
-            color: theme.palette.primary[900],
-          }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Update checkOut">
+          <Box
+            onClick={() => handleOpenDialog("dateUpdate", params.row)}
+            style={{
+              fontSize: "0.75rem",
+              cursor: "pointer",
+              color: theme.palette.primary[900],
+            }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -456,16 +440,18 @@ const StayRecordsTable = ({
       headerAlign: "center",
       align: "center",
       renderCell: (params) => (
-        <Box
-          onClick={() => handleOpenDialog("guestNumberUpdate", params.row)}
-          style={{
-            fontSize: "0.75rem",
-            cursor: "pointer",
-            color: theme.palette.primary[900],
-          }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Update Guest Number">
+          <Box
+            onClick={() => handleOpenDialog("guestNumberUpdate", params.row)}
+            style={{
+              fontSize: "0.75rem",
+              cursor: "pointer",
+              color: theme.palette.primary[900],
+            }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -708,6 +694,7 @@ const StayRecordsTable = ({
           userId={userId}
           logUserAction={logUserAction}
           open={true}
+          fetchStayRecords={fetchStayRecords}
           onClose={handleCloseDialog}
           stayRecordId={selectedStayRecord.id}
         />
@@ -731,6 +718,8 @@ const StayRecordsTable = ({
           userId={userId}
           logUserAction={logUserAction}
           showSnackbar={showSnackbar}
+          stayRecord={selectedCheckIn}
+          roomRate={selectedStayRecord}
         />
       )}
 

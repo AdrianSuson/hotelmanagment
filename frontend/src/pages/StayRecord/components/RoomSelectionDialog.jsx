@@ -159,12 +159,14 @@ const RoomSelectionDialog = ({
         </DialogContent>
         <DialogActions>
           <Button
+            variant="contained"
             onClick={handleConfirmationClose}
             sx={{ color: theme.palette.secondary[700] }}
           >
             Cancel
           </Button>
           <Button
+            variant="contained"
             onClick={handleConfirmationAccept}
             sx={{ color: theme.palette.primary[700] }}
           >

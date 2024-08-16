@@ -97,7 +97,7 @@ router.get("/rooms/:id", async (req, res) => {
     const query = `
       SELECT r.id, r.room_number, r.rate, r.imageUrl,
              rt.name AS room_type, 
-             sc.label AS status, sc.color AS status_color, sc.text_color
+             sc.id AS status_code_id, sc.label AS status, sc.color AS status_color, sc.text_color
       FROM rooms r
       LEFT JOIN room_types rt ON r.room_type_id = rt.id
       LEFT JOIN status_codes sc ON r.status_code_id = sc.id
@@ -114,7 +114,13 @@ router.get("/rooms/:id", async (req, res) => {
     res.json({
       success: true,
       room: {
-        ...room,
+        id: room.id,
+        room_number: room.room_number,
+        rate: room.rate,
+        imageUrl: room.imageUrl,
+        room_type: room.room_type,
+        status_code_id: room.status_code_id,
+        status: room.status,
         color: room.status_color,
         text_color: room.text_color,
       },
@@ -210,7 +216,14 @@ router.put("/rooms/:id", upload.single("image"), async (req, res) => {
     // Delete the old image if a new image is uploaded
     if (file && existingRoom.imageUrl) {
       fs.unlink(
-        path.join(__dirname, "..", "..", "assets", "Rooms", existingRoom.imageUrl),
+        path.join(
+          __dirname,
+          "..",
+          "..",
+          "assets",
+          "Rooms",
+          existingRoom.imageUrl
+        ),
         (err) => {
           if (err) {
             console.error("Error deleting old image:", err);
@@ -259,10 +272,14 @@ router.delete("/rooms/:id", async (req, res) => {
 
   try {
     // Fetch the image path before deleting the room
-    const [rows] = await db.query("SELECT imageUrl FROM rooms WHERE id = ?", [id]);
+    const [rows] = await db.query("SELECT imageUrl FROM rooms WHERE id = ?", [
+      id,
+    ]);
 
     if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Room not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Room not found." });
     }
 
     const imageUrl = rows[0].imageUrl;
@@ -271,16 +288,21 @@ router.delete("/rooms/:id", async (req, res) => {
     const [result] = await db.query("DELETE FROM rooms WHERE id = ?", [id]);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Room not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Room not found." });
     }
 
     // Delete the image file from the filesystem
     if (imageUrl) {
-      fs.unlink(path.join(__dirname, "..", "..", "assets", "Rooms", imageUrl), (err) => {
-        if (err) {
-          console.error("Error deleting image:", err);
+      fs.unlink(
+        path.join(__dirname, "..", "..", "assets", "Rooms", imageUrl),
+        (err) => {
+          if (err) {
+            console.error("Error deleting image:", err);
+          }
         }
-      });
+      );
     }
 
     res.json({ success: true, message: "Room deleted successfully." });

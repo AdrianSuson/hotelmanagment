@@ -142,13 +142,15 @@ const ReservationsTable = ({
       align: "center",
       disableColumnMenu: true,
       renderCell: (params) => (
-        <Box
-          variant="text"
-          onClick={() => handleEditClick(params.row)}
-          style={{ cursor: "pointer", color: theme.palette.primary[900] }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Update Guest Info">
+          <Box
+            variant="text"
+            onClick={() => handleEditClick(params.row)}
+            style={{ cursor: "pointer", color: theme.palette.primary[900] }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -159,13 +161,15 @@ const ReservationsTable = ({
       align: "center",
       disableColumnMenu: true,
       renderCell: (params) => (
-        <Box
-          variant="text"
-          onClick={() => handleRoomClick(params.row)}
-          style={{ cursor: "pointer", color: theme.palette.primary[900] }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Change Room">
+          <Box
+            variant="text"
+            onClick={() => handleRoomClick(params.row)}
+            style={{ cursor: "pointer", color: theme.palette.primary[900] }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -176,13 +180,15 @@ const ReservationsTable = ({
       align: "center",
       disableColumnMenu: true,
       renderCell: (params) => (
-        <Box
-          variant="text"
-          onClick={() => handleDateClick(params.row)}
-          style={{ cursor: "pointer", color: theme.palette.primary[900] }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Update Check-in">
+          <Box
+            variant="text"
+            onClick={() => handleDateClick(params.row)}
+            style={{ cursor: "pointer", color: theme.palette.primary[900] }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -193,13 +199,15 @@ const ReservationsTable = ({
       align: "center",
       disableColumnMenu: true,
       renderCell: (params) => (
-        <Box
-          variant="text"
-          onClick={() => handleDateClick(params.row)}
-          style={{ cursor: "pointer", color: theme.palette.primary[900] }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Update CheckOut">
+          <Box
+            variant="text"
+            onClick={() => handleDateClick(params.row)}
+            style={{ cursor: "pointer", color: theme.palette.primary[900] }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -210,13 +218,15 @@ const ReservationsTable = ({
       align: "center",
       disableColumnMenu: true,
       renderCell: (params) => (
-        <Box
-          variant="text"
-          onClick={() => handleGuestNumberClick(params.row)}
-          style={{ cursor: "pointer", color: theme.palette.primary[900] }}
-        >
-          {params.value}
-        </Box>
+        <Tooltip title="Update Guest Number">
+          <Box
+            variant="text"
+            onClick={() => handleGuestNumberClick(params.row)}
+            style={{ cursor: "pointer", color: theme.palette.primary[900] }}
+          >
+            {params.value}
+          </Box>
+        </Tooltip>
       ),
     },
     {
@@ -263,7 +273,7 @@ const ReservationsTable = ({
           <Button
             sx={{
               color: theme.palette.secondary[100],
-              background: theme.palette.primary.main,
+              background: "#4A1210",
               "&:hover": {
                 transform: "scale(1.1)",
                 color: theme.palette.primary[700],

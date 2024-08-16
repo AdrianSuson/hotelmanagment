@@ -221,7 +221,7 @@ const RoomSettings = ({
     <>
       <Accordion>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h6">Room Settings</Typography>
+          <Typography variant="h6">Room Management</Typography>
         </AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={3}>
@@ -364,10 +364,18 @@ const RoomSettings = ({
           <List>
             {statusOptions.map((status) => (
               <ListItem key={status.id}>
-                <ListItemText
-                  primary={`${status.code} - ${status.label}`}
-                  secondary={`Color: ${status.color}`}
-                />
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Box
+                    sx={{
+                      width: 20,
+                      height: 20,
+                      backgroundColor: status.color,
+                      marginRight: 1,
+                      color: status.text_color,
+                    }}
+                  />
+                  {status.code} - {status.label}
+                </Box>
                 <ListItemSecondaryAction>
                   <IconButton
                     edge="end"

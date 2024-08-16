@@ -83,11 +83,16 @@ const LoginPage = ({ setUserRole }) => {
         } else {
           setError("Invalid role");
         }
-      } else {
-        setError("Invalid credentials");
       }
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      // Handle specific error responses
+      if (err.response && err.response.status === 404) {
+        setError("The account does not exist.");
+      } else if (err.response && err.response.status === 401) {
+        setError("Invalid credentials");
+      } else {
+        setError("An error occurred. Please try again.");
+      }
     }
   };
 

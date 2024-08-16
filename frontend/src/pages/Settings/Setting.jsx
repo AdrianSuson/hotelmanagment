@@ -71,7 +71,7 @@ const Setting = ({
 
       <Accordion>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h6">Advertisment</Typography>
+          <Typography variant="h6">Advertisment Management</Typography>
         </AccordionSummary>
         <AccordionDetails>
           <Slideshow />
@@ -96,7 +96,7 @@ const Setting = ({
 
       <Accordion>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h6">Service Management</Typography>
+          <Typography variant="h6">Service & Discount Management</Typography>
         </AccordionSummary>
         <AccordionDetails>
           <ServiceManagement logUserAction={logUserAction} showSnackbar={showSnackbar} />

@@ -14,6 +14,7 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  ButtonGroup,
 } from "@mui/material";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -24,35 +25,32 @@ import config from "../../../state/config";
 
 const ServiceManagement = ({ logUserAction }) => {
   const [services, setServices] = useState([]);
+  const [discounts, setDiscounts] = useState([]);
   const [addServiceOpen, setAddServiceOpen] = useState(false);
+  const [addDiscountOpen, setAddDiscountOpen] = useState(false);
   const [newServiceName, setNewServiceName] = useState("");
   const [newServiceDescription, setNewServiceDescription] = useState("");
   const [newServiceBasePrice, setNewServiceBasePrice] = useState("");
+  const [newDiscountName, setNewDiscountName] = useState("");
+  const [newDiscountPercentage, setNewDiscountPercentage] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTargetType, setDeleteTargetType] = useState(null); // 'service' or 'discount'
   const [serviceListDialogOpen, setServiceListDialogOpen] = useState(false);
+  const [discountListDialogOpen, setDiscountListDialogOpen] = useState(false);
 
   const { snackbar, showSnackbar, closeSnackbar } = useSnackbar();
   const loggedInUserId = localStorage.getItem("userId");
 
   const fetchServices = useCallback(async () => {
     try {
-      console.log("Fetching services...");
       const response = await axios.get(`${config.API_URL}/service_list`);
-
       if (response.status === 200 && response.data.services) {
         const newServices = response.data.services.map((service) => ({
           ...service,
           base_price: parseFloat(service.base_price),
         }));
-
-        // Only update state if the data has changed
-        setServices((prevServices) => {
-          if (JSON.stringify(prevServices) !== JSON.stringify(newServices)) {
-            return newServices;
-          }
-          return prevServices;
-        });
+        setServices(newServices);
       }
     } catch (error) {
       console.error("Failed to fetch services:", error);
@@ -60,9 +58,22 @@ const ServiceManagement = ({ logUserAction }) => {
     }
   }, [showSnackbar]);
 
+  const fetchDiscounts = useCallback(async () => {
+    try {
+      const response = await axios.get(`${config.API_URL}/discounts`);
+      if (response.status === 200 && response.data.discounts) {
+        setDiscounts(response.data.discounts);
+      }
+    } catch (error) {
+      console.error("Failed to fetch discounts:", error);
+      showSnackbar("Failed to fetch discounts", "error");
+    }
+  }, [showSnackbar]);
+
   useEffect(() => {
     fetchServices();
-  }, [fetchServices]);
+    fetchDiscounts();
+  }, [fetchServices, fetchDiscounts]);
 
   const handleAddService = async () => {
     try {
@@ -71,7 +82,6 @@ const ServiceManagement = ({ logUserAction }) => {
         description: newServiceDescription,
         base_price: newServiceBasePrice,
       });
-
       setServices((prevServices) => [
         ...prevServices,
         {
@@ -81,7 +91,7 @@ const ServiceManagement = ({ logUserAction }) => {
       ]);
       setNewServiceName("");
       setNewServiceDescription("");
-      setNewServiceBasePrice(0);
+      setNewServiceBasePrice("");
       setAddServiceOpen(false);
       showSnackbar("Service added successfully", "success");
       logUserAction(
@@ -94,61 +104,109 @@ const ServiceManagement = ({ logUserAction }) => {
     }
   };
 
-  const handleDeleteService = async (id) => {
-    const serviceToDelete = services.find((s) => s.id === id);
+  const handleAddDiscount = async () => {
     try {
-      const response = await axios.delete(
-        `${config.API_URL}/service_list/${id}`
-      );
-      if (response.data.success) {
-        setServices((prevServices) =>
-          prevServices.filter((service) => service.id !== id)
-        );
-        showSnackbar("Service deleted successfully", "success");
-        logUserAction(
-          loggedInUserId,
-          `Deleted service: ${serviceToDelete.name}`
-        );
-      } else {
-        console.error(response.data.message);
-        showSnackbar(response.data.message, "error");
-      }
-      setDeleteDialogOpen(false);
+      const response = await axios.post(`${config.API_URL}/discounts`, {
+        name: newDiscountName,
+        percentage: newDiscountPercentage,
+      });
+      setDiscounts((prevDiscounts) => [
+        ...prevDiscounts,
+        {
+          id: response.data.discountId,
+          name: newDiscountName,
+          percentage: newDiscountPercentage,
+        },
+      ]);
+      setNewDiscountName("");
+      setNewDiscountPercentage("");
+      setAddDiscountOpen(false);
+      showSnackbar("Discount added successfully", "success");
+      logUserAction(loggedInUserId, `Added new discount: ${newDiscountName}`);
     } catch (error) {
-      console.error("Failed to delete service:", error);
-      showSnackbar("Failed to delete service", "error");
+      console.error("Failed to add discount:", error);
+      showSnackbar("Failed to add discount", "error");
     }
   };
 
-  const handleDeleteClick = (id) => {
-    setDeleteTarget(id);
-    setDeleteDialogOpen(true);
+  const handleDelete = async () => {
+    const targetId = deleteTarget;
+    const targetType = deleteTargetType;
+
+    try {
+      if (targetType === "service") {
+        const response = await axios.delete(
+          `${config.API_URL}/service_list/${targetId}`
+        );
+        if (response.data.success) {
+          setServices((prevServices) =>
+            prevServices.filter((service) => service.id !== targetId)
+          );
+          showSnackbar("Service deleted successfully", "success");
+          logUserAction(loggedInUserId, `Deleted service: ${targetId}`);
+        }
+      } else if (targetType === "discount") {
+        const response = await axios.delete(
+          `${config.API_URL}/discounts/${targetId}`
+        );
+        if (response.data.success) {
+          setDiscounts((prevDiscounts) =>
+            prevDiscounts.filter((discount) => discount.id !== targetId)
+          );
+          showSnackbar("Discount deleted successfully", "success");
+          logUserAction(loggedInUserId, `Deleted discount: ${targetId}`);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to delete ${targetType}:`, error);
+      showSnackbar(`Failed to delete ${targetType}`, "error");
+    }
+
+    setDeleteDialogOpen(false);
   };
 
-  const confirmDelete = () => {
-    handleDeleteService(deleteTarget);
+  const handleDeleteClick = (id, type) => {
+    setDeleteTarget(id);
+    setDeleteTargetType(type);
+    setDeleteDialogOpen(true);
   };
 
   return (
     <>
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddCircleOutlineIcon />}
-          onClick={() => setAddServiceOpen(true)}
-        >
-          Add Service
-        </Button>
-        <Button
-          variant="outlined"
-          color="primary"
-          onClick={() => setServiceListDialogOpen(true)}
-        >
-          Service Lists
-        </Button>
+        <ButtonGroup color="primary">
+          <Button
+            variant="contained"
+            startIcon={<AddCircleOutlineIcon />}
+            onClick={() => setAddServiceOpen(true)}
+          >
+            Add Service
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setServiceListDialogOpen(true)}
+          >
+            Service Lists
+          </Button>
+        </ButtonGroup>
+        <ButtonGroup color="primary">
+          <Button
+            variant="contained"
+            startIcon={<AddCircleOutlineIcon />}
+            onClick={() => setAddDiscountOpen(true)}
+          >
+            Add Discount
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setDiscountListDialogOpen(true)}
+          >
+            Discount Lists
+          </Button>
+        </ButtonGroup>
       </Box>
 
+      {/* Add Service Dialog */}
       <Dialog open={addServiceOpen} onClose={() => setAddServiceOpen(false)}>
         <DialogTitle>Add Service</DialogTitle>
         <DialogContent>
@@ -176,33 +234,87 @@ const ServiceManagement = ({ logUserAction }) => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleAddService} color="primary">
+          <Button
+            variant="contained"
+            onClick={handleAddService}
+            color="primary"
+          >
             Add
           </Button>
-          <Button onClick={() => setAddServiceOpen(false)} color="secondary">
+          <Button
+            variant="contained"
+            onClick={() => setAddServiceOpen(false)}
+            color="secondary"
+          >
             Cancel
           </Button>
         </DialogActions>
       </Dialog>
 
+      {/* Add Discount Dialog */}
+      <Dialog open={addDiscountOpen} onClose={() => setAddDiscountOpen(false)}>
+        <DialogTitle>Add Discount</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Discount Name"
+            value={newDiscountName}
+            onChange={(e) => setNewDiscountName(e.target.value)}
+            fullWidth
+            margin="normal"
+          />
+          <TextField
+            label="Discount Percentage"
+            type="number"
+            value={newDiscountPercentage}
+            onChange={(e) => setNewDiscountPercentage(e.target.value)}
+            fullWidth
+            margin="normal"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            onClick={handleAddDiscount}
+            color="primary"
+          >
+            Add
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setAddDiscountOpen(false)}
+            color="secondary"
+          >
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirm Delete Dialog */}
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
       >
         <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
-          <Typography>Are you sure you want to delete this service?</Typography>
+          <Typography>
+            Are you sure you want to delete this {deleteTargetType}?
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} color="secondary">
+          <Button
+            variant="contained"
+            onClick={() => setDeleteDialogOpen(false)}
+            color="secondary"
+          >
             Cancel
           </Button>
-          <Button onClick={confirmDelete} color="primary">
+          <Button variant="contained" onClick={handleDelete} color="primary">
             Delete
           </Button>
         </DialogActions>
       </Dialog>
 
+      {/* Service List Dialog */}
       <Dialog
         open={serviceListDialogOpen}
         onClose={() => setServiceListDialogOpen(false)}
@@ -222,7 +334,7 @@ const ServiceManagement = ({ logUserAction }) => {
                   <IconButton
                     edge="end"
                     aria-label="delete"
-                    onClick={() => handleDeleteClick(service.id)}
+                    onClick={() => handleDeleteClick(service.id, "service")}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -232,7 +344,51 @@ const ServiceManagement = ({ logUserAction }) => {
           </List>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setServiceListDialogOpen(false)} color="primary">
+          <Button
+            variant="contained"
+            onClick={() => setServiceListDialogOpen(false)}
+            color="primary"
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Discount List Dialog */}
+      <Dialog
+        open={discountListDialogOpen}
+        onClose={() => setDiscountListDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Discount Lists</DialogTitle>
+        <DialogContent>
+          <List>
+            {discounts.map((discount) => (
+              <ListItem key={discount.id}>
+                <ListItemText
+                  primary={discount.name}
+                  secondary={`${discount.percentage}%`}
+                />
+                <ListItemSecondaryAction>
+                  <IconButton
+                    edge="end"
+                    aria-label="delete"
+                    onClick={() => handleDeleteClick(discount.id, "discount")}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            onClick={() => setDiscountListDialogOpen(false)}
+            color="primary"
+          >
             Close
           </Button>
         </DialogActions>

@@ -11,7 +11,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  IconButton,
   Paper,
   Grid,
   Dialog,
@@ -25,9 +24,6 @@ import axios from "axios";
 import config from "../../../state/config";
 import dayjs from "dayjs";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import DiscountIcon from "@mui/icons-material/Discount";
-import DeleteIcon from "@mui/icons-material/Delete";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import AddDiscountDialog from "./AddDiscountDialog";
 
 const BillingDialog = ({
@@ -47,12 +43,14 @@ const BillingDialog = ({
   showSnackbar,
 }) => {
   const [discountId, setDiscountId] = useState("");
+  const [previousDiscountApplied, setPreviousDiscountApplied] = useState(false);
   const [cashTendered, setCashTendered] = useState("");
   const [change, setChange] = useState(0);
   const [services, setServices] = useState([]);
   const [discounts, setDiscounts] = useState([]);
   const [servicesDialogOpen, setServicesDialogOpen] = useState(false);
   const [addDiscountDialogOpen, setAddDiscountDialogOpen] = useState(false);
+  const [isOvertime, setIsOvertime] = useState(false);
 
   const fetchServices = useCallback(async () => {
     if (!selectedStayRecordId) return;
@@ -68,7 +66,6 @@ const BillingDialog = ({
       setBillDetails((prev) => ({
         ...prev,
         additionalServicesCharges,
-        totalAmount: prev.roomCharges + additionalServicesCharges,
       }));
     } catch (error) {
       showSnackbar("Failed to fetch services", "error");
@@ -88,7 +85,8 @@ const BillingDialog = ({
     if (!open) return;
     fetchDiscounts();
     fetchServices();
-  }, [open, fetchServices, fetchDiscounts]);
+    setIsOvertime(dayjs().isAfter(dayjs(checkOutDate), "day"));
+  }, [open, fetchDiscounts, fetchServices, checkOutDate]);
 
   const discountAmount = useMemo(() => {
     const selectedDiscount = discounts.find(
@@ -100,15 +98,32 @@ const BillingDialog = ({
       : 0;
   }, [discountId, discounts, billDetails]);
 
-  const totalAmountAfterDiscount = useMemo(() => {
-    return (
-      billDetails.roomCharges +
-      billDetails.additionalServicesCharges -
-      discountAmount
-    );
-  }, [billDetails, discountAmount]);
+  const totalAmount = useMemo(() => {
+    const totalServiceCharges = billDetails.additionalServicesCharges || 0;
+    const totalDiscount = discountAmount || 0;
 
-  const handleApplyDiscount = () => {
+    const total =
+      parseFloat(billDetails.roomCharges) + totalServiceCharges - totalDiscount;
+
+    console.log(
+      "roomCharges:",
+      billDetails.roomCharges,
+      "totalServiceCharges:",
+      totalServiceCharges,
+      "totalDiscount:",
+      totalDiscount,
+      "totalAmount:",
+      total
+    );
+
+    return total;
+  }, [
+    billDetails.roomCharges,
+    billDetails.additionalServicesCharges,
+    discountAmount,
+  ]);
+
+  const handleApplyDiscount = useCallback(() => {
     const selectedDiscount = discounts.find(
       (discount) => discount && discount.id === discountId
     );
@@ -116,56 +131,84 @@ const BillingDialog = ({
       showSnackbar("Invalid discount selected", "error");
       return;
     }
+    setPreviousDiscountApplied(true);
     setBillDetails((prev) => ({
       ...prev,
       discount: discountAmount,
-      totalAmount: totalAmountAfterDiscount,
+      totalAmount: totalAmount,
       discountName: selectedDiscount.name,
     }));
-    setDiscountId("");
-  };
+  }, [
+    discountId,
+    discounts,
+    discountAmount,
+    totalAmount,
+    setBillDetails,
+    showSnackbar,
+  ]);
 
-  const handleRemoveDiscount = () => {
+  const handleRemoveDiscount = useCallback(() => {
+    if (previousDiscountApplied) {
+      showSnackbar("Discount removed successfully", "success");
+      setPreviousDiscountApplied(false);
+    }
     setBillDetails((prev) => ({
       ...prev,
       discount: 0,
       totalAmount: prev.roomCharges + prev.additionalServicesCharges,
       discountName: null,
     }));
-    showSnackbar("Discount removed successfully", "success");
-  };
+  }, [setBillDetails, showSnackbar, previousDiscountApplied]);
+
+  useEffect(() => {
+    if (discountId === "" && open) {
+      handleRemoveDiscount();
+    } else if (open) {
+      handleApplyDiscount();
+    }
+  }, [discountId, handleApplyDiscount, handleRemoveDiscount, open]);
 
   const handlePaymentAndStatusChange = async () => {
     try {
-      await onChangeRoomStatus(selectedRoomId, roomStatusCheckOut);
-
+      // Prepare the payload for the payment request
       const payload = {
-        amount: billDetails.totalAmount,
+        amount: totalAmount, // Ensure this is a number
         payment_method: "cash",
         total_service_charges: billDetails.additionalServicesCharges,
-        discount_percentage: billDetails.discount
-          ? (billDetails.discount /
-              (billDetails.roomCharges +
-                billDetails.additionalServicesCharges)) *
+        discount_percentage: discountAmount
+          ? (discountAmount /
+              (parseFloat(billDetails.roomCharges) +
+                parseFloat(billDetails.additionalServicesCharges))) *
             100
           : 0,
         discount_name: billDetails.discountName || null,
       };
 
+      // Send the payment request to the backend
       await axios.post(
         `${config.API_URL}/stay_records/${selectedStayRecordId}/payment`,
         payload
       );
 
+      // Show success message
       showSnackbar("Payment processed successfully", "success");
+
+      // Log user action for audit purposes
       logUserAction(
         userId,
         `Processed payment for stay record ID: ${selectedStayRecordId}`
       );
 
+      // Update the room status after payment is successful
+      await onChangeRoomStatus(selectedRoomId, roomStatusCheckOut);
+
+      // Refresh the stay records to reflect the changes
       fetchStayRecords();
+
+      // Close the billing dialog
       onClose();
     } catch (error) {
+      // Show error message if something goes wrong
       showSnackbar("Payment or status update failed", "error");
     }
   };
@@ -174,29 +217,44 @@ const BillingDialog = ({
     setDiscounts((prev) => [...prev, newDiscount]);
   };
 
-  const handleDeleteDiscount = async (id) => {
-    try {
-      await axios.delete(`${config.API_URL}/discounts/${id}`);
-      setDiscounts((prev) =>
-        prev.filter((discount) => discount && discount.id !== id)
-      );
-      showSnackbar("Discount deleted successfully", "success");
-    } catch (error) {
-      showSnackbar("Failed to delete discount", "error");
-    }
-  };
-
+  // Calculate the number of days of the stay
   const numberOfDays = useMemo(() => {
-    return dayjs(checkOutDate).diff(dayjs(checkInDate), "day") || 1;
+    const days = dayjs(checkOutDate).diff(dayjs(checkInDate), "day");
+    return days > 0 ? days : 1; // Ensure at least 1 day
   }, [checkOutDate, checkInDate]);
 
+  // Calculate the room rate per day
   const roomRatePerDay = useMemo(() => {
-    return (billDetails.roomCharges / numberOfDays).toFixed(2);
-  }, [billDetails.roomCharges, numberOfDays]);
+    return parseFloat(billDetails.roomRate).toFixed(2);
+  }, [billDetails.roomRate]);
+
+  // Calculate the total room charges based on the number of days
+  const roomCharges = useMemo(() => {
+    const rate = parseFloat(billDetails.roomRate) || 0;
+    const charges = rate * numberOfDays;
+
+    console.log(
+      "roomRate:",
+      rate,
+      "numberOfDays:",
+      numberOfDays,
+      "roomCharges:",
+      charges
+    );
+
+    return charges;
+  }, [billDetails.roomRate, numberOfDays]);
+
+  useEffect(() => {
+    setBillDetails((prev) => ({
+      ...prev,
+      roomCharges: roomCharges,
+    }));
+  }, [roomCharges, setBillDetails]);
 
   const handleCashTenderedChange = (e) => {
     const cash = parseFloat(e.target.value) || 0;
-    const changeAmount = cash - billDetails.totalAmount;
+    const changeAmount = cash - totalAmount;
     setCashTendered(cash);
     setChange(changeAmount >= 0 ? changeAmount : 0);
   };
@@ -232,6 +290,13 @@ const BillingDialog = ({
           >
             Billing Details
           </Typography>
+
+          {isOvertime && (
+            <Typography variant="h6" color="error" align="center" gutterBottom>
+              Overtime: Extra Day Added
+            </Typography>
+          )}
+
           <Box mb={0.5}>
             <Typography color="primary" variant="h6">
               Stay Duration: {numberOfDays} {numberOfDays > 1 ? "days" : "day"}{" "}
@@ -240,8 +305,7 @@ const BillingDialog = ({
           </Box>
           <Paper variant="outlined" sx={{ p: 1, mb: 0.5 }}>
             <Typography variant="body1">
-              <strong>Room Charges:</strong> ₱
-              {(billDetails.roomCharges ?? 0).toFixed(2)}
+              <strong>Room Charges:</strong> ₱{roomCharges ?? 0}
             </Typography>
             <Typography variant="body1">
               <strong>Additional Services:</strong> ₱
@@ -258,22 +322,12 @@ const BillingDialog = ({
           </Paper>
           <Paper variant="outlined" sx={{ p: 1, mb: 0.5 }}>
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={11}>
+              <Grid item xs={12}>
                 <Box display="flex" flex="row" justifyContent="space-between">
                   <Typography variant="body1">
                     <strong>Discount:</strong> -₱
                     {(billDetails.discount ?? 0).toFixed(2)}
                   </Typography>
-                  {billDetails.discount > 0 && (
-                    <Button
-                      variant="contained"
-                      color="secondary"
-                      onClick={handleRemoveDiscount}
-                      sx={{ mt: 1 }}
-                    >
-                      Remove Discount
-                    </Button>
-                  )}
                 </Box>
                 <FormControl fullWidth margin="normal">
                   <InputLabel id="discount-select-label">
@@ -286,6 +340,9 @@ const BillingDialog = ({
                     onChange={(e) => setDiscountId(e.target.value)}
                     fullWidth
                   >
+                    <MenuItem value="">
+                      <em>No Discount</em>
+                    </MenuItem>
                     {discounts.length > 0 ? (
                       discounts.map((discount) =>
                         discount ? (
@@ -302,15 +359,6 @@ const BillingDialog = ({
                               >
                                 {discount.name} ({discount.percentage}%)
                               </Box>
-                              <IconButton
-                                onClick={() =>
-                                  handleDeleteDiscount(discount.id)
-                                }
-                                edge="end"
-                                size="small"
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
                             </Box>
                           </MenuItem>
                         ) : null
@@ -321,25 +369,7 @@ const BillingDialog = ({
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={1} sx={{ marginTop: 3.5 }}>
-                <IconButton
-                  variant="contained"
-                  onClick={() => setAddDiscountDialogOpen(true)}
-                  color="primary"
-                >
-                  <AddCircleOutlineIcon />
-                </IconButton>
-              </Grid>
             </Grid>
-            <Button
-              variant="contained"
-              onClick={handleApplyDiscount}
-              fullWidth
-              sx={{ mt: 1 }}
-              endIcon={<DiscountIcon />}
-            >
-              Apply Discount
-            </Button>
           </Paper>
           <Paper variant="outlined" sx={{ p: 1, mb: 0.5 }}>
             <TextField
@@ -352,8 +382,7 @@ const BillingDialog = ({
               sx={{ mt: 2 }}
             />
             <Typography variant="h4" sx={{ mt: 2 }}>
-              <strong>Total Due:</strong> ₱
-              {(billDetails.totalAmount ?? 0).toFixed(2)}
+              <strong>Total Due:</strong> ₱{totalAmount ?? 0}
             </Typography>
           </Paper>
           <Paper variant="outlined" sx={{ p: 1 }}>
@@ -423,6 +452,7 @@ BillingDialog.propTypes = {
     discount: PropTypes.number,
     totalAmount: PropTypes.number,
     discountName: PropTypes.string,
+    roomRate: PropTypes.string,
   }).isRequired,
   setBillDetails: PropTypes.func.isRequired,
   onChangeRoomStatus: PropTypes.func.isRequired,

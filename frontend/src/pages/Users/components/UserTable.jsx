@@ -40,11 +40,13 @@ const UserTable = ({
     setSelectedUserId(null);
   };
 
+  // Filter out the user with ID "admin-000000" and apply the search filter
   const filteredData = users.filter(
     (user) =>
-      user.userId.toString().toLowerCase().includes(search.toLowerCase()) ||
-      user.username.toLowerCase().includes(search.toLowerCase()) ||
-      user.role.toLowerCase().includes(search.toLowerCase())
+      user.userId !== "admin-000000" && // Exclude the admin-000000 user
+      (user.userId.toString().toLowerCase().includes(search.toLowerCase()) ||
+        user.username.toLowerCase().includes(search.toLowerCase()) ||
+        user.role.toLowerCase().includes(search.toLowerCase()))
   );
 
   const columns = [

@@ -2,6 +2,7 @@ import PropTypes from "prop-types";
 import {
   Box,
   Button,
+  ButtonGroup,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,6 +16,34 @@ import Webcam from "react-webcam";
 import { useState, useCallback, useRef, useEffect } from "react";
 import axios from "axios";
 import config from "../../../state/config";
+
+// Utility function to convert dataURL to Blob
+const dataURLToBlob = (dataURL) => {
+  try {
+    const [header, base64Data] = dataURL.split(";base64,");
+    const mimeType = header.split(":")[1];
+    const binary = atob(base64Data);
+    const arrayBuffer = new ArrayBuffer(binary.length);
+    const uintArray = new Uint8Array(arrayBuffer);
+
+    for (let i = 0; i < binary.length; i++) {
+      uintArray[i] = binary.charCodeAt(i);
+    }
+
+    return new Blob([arrayBuffer], { type: mimeType });
+  } catch (error) {
+    console.error("Error converting data URL to Blob:", error);
+    return null;
+  }
+};
+
+const generateRandomString = (length) => {
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  return Array.from({ length }, () =>
+    characters.charAt(Math.floor(Math.random() * characters.length))
+  ).join("");
+};
 
 const ConfirmReservationDialog = ({
   userId,
@@ -36,106 +65,103 @@ const ConfirmReservationDialog = ({
 }) => {
   const [capturedImage, setCapturedImage] = useState(null);
   const [existingImage, setExistingImage] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [isConfirmDisabled, setIsConfirmDisabled] = useState(false);
   const webcamRef = useRef(null);
-
-  const fetchReservationDetails = useCallback(async (reservationId) => {
-    try {
-      const response = await axios.get(`${config.API_URL}/reservation/${reservationId}`);
-      if (response.data.success && response.data.reservation.id_picture) {
-        const imageUrl = `${config.API_URL}/id_picture/${response.data.reservation.id_picture}`;
-        setExistingImage(imageUrl);
-      }
-    } catch (error) {
-      console.error("Error fetching reservation details:", error);
-      showSnackbar("Failed to fetch reservation details.", "error");
-    }
-  }, [showSnackbar]);
 
   useEffect(() => {
     if (confirmDialogOpen && currentRow?.id) {
-      fetchReservationDetails(currentRow.id);
-      console.log(roomStatus)
+      const fetchRoomStatus = async () => {
+        try {
+          const { data } = await axios.get(`${config.API_URL}/rooms/${roomId}`);
+          const currentRoomStatus = data.room?.status_code_id;
+
+          if (currentRoomStatus === roomStatus) {
+            setIsConfirmDisabled(true);
+            showSnackbar(
+              "The room is already occupied. Confirmation not allowed.",
+              "error"
+            );
+          } else {
+            setIsConfirmDisabled(false);
+          }
+        } catch (error) {
+          console.error("Error fetching room status:", error);
+          showSnackbar("Failed to fetch room status.", "error");
+        }
+      };
+
+      fetchRoomStatus();
     }
-  }, [confirmDialogOpen, currentRow, fetchReservationDetails,roomStatus]);
+  }, [confirmDialogOpen, currentRow, roomId, roomStatus, showSnackbar]);
 
-  const capture = useCallback(() => {
-    const dataURLToBlob = (dataURL) => {
-      try {
-        const parts = dataURL.split(";base64,");
-        if (parts.length !== 2) {
-          throw new Error("Invalid base64 data");
+  useEffect(() => {
+    if (confirmDialogOpen && currentRow?.id) {
+      const fetchReservationDetails = async () => {
+        try {
+          const { data } = await axios.get(
+            `${config.API_URL}/reservation/${currentRow.id}`
+          );
+          if (data.success && data.reservation.id_picture) {
+            setExistingImage(
+              `${config.API_URL}/id_picture/${data.reservation.id_picture}`
+            );
+          }
+        } catch (error) {
+          console.error("Error fetching reservation details:", error);
+          showSnackbar("Failed to fetch reservation details.", "error");
         }
-        const byteString = atob(parts[1]);
-        const mimeString = parts[0].split(":")[1];
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        for (let i = 0; i < byteString.length; i++) {
-          ia[i] = byteString.charCodeAt(i);
-        }
-        return new Blob([ab], { type: mimeString });
-      } catch (error) {
-        console.error("Error converting data URL to Blob:", error);
-        showSnackbar("Failed to process captured image.", "error");
-        return null;
-      }
-    };
+      };
 
+      fetchReservationDetails();
+    }
+  }, [confirmDialogOpen, currentRow, showSnackbar]);
+
+  const handleCapture = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();
     setCapturedImage(imageSrc);
     const file = dataURLToBlob(imageSrc);
-    handleFileChange(file);
+    if (file) {
+      handleFileChange(file);
+      setUploadedFile(null);
+    } else {
+      showSnackbar("Failed to process captured image.", "error");
+    }
   }, [webcamRef, handleFileChange, showSnackbar]);
 
-  const recapture = () => {
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setUploadedFile(file);
+      setCapturedImage(null);
+      setExistingImage(null);
+      handleFileChange(file);
+    }
+  };
+
+  const handleRecapture = () => {
     setCapturedImage(null);
     setExistingImage(null);
+    setUploadedFile(null);
   };
 
-  const generateRandomString = (length) => {
-    const characters =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += characters.charAt(
-        Math.floor(Math.random() * characters.length)
-      );
-    }
-    return result;
-  };
-
-  const submitConfirmation = async () => {
+  const handleSubmitConfirmation = async () => {
     if (!currentRow) {
       showSnackbar("No reservation selected for confirmation.", "error");
       return;
     }
 
     const formData = new FormData();
-    if (capturedImage) {
-      const dataURLToBlob = (dataURL) => {
-        try {
-          const parts = dataURL.split(";base64,");
-          if (parts.length !== 2) {
-            throw new Error("Invalid base64 data");
-          }
-          const byteString = atob(parts[1]);
-          const mimeString = parts[0].split(":")[1];
-          const ab = new ArrayBuffer(byteString.length);
-          const ia = new Uint8Array(ab);
-          for (let i = 0; i < byteString.length; i++) {
-            ia[i] = byteString.charCodeAt(i);
-          }
-          return new Blob([ab], { type: mimeString });
-        } catch (error) {
-          console.error("Error converting data URL to Blob:", error);
-          showSnackbar("Failed to process captured image.", "error");
-          return null;
-        }
-      };
-
+    if (uploadedFile) {
+      formData.append(
+        "id_picture",
+        uploadedFile,
+        `${generateRandomString(16)}.jpg`
+      );
+    } else if (capturedImage) {
       const blob = dataURLToBlob(capturedImage);
-      const randomFilename = `${generateRandomString(16)}.jpg`;
       if (blob) {
-        formData.append("id_picture", blob, randomFilename);
+        formData.append("id_picture", blob, `${generateRandomString(16)}.jpg`);
       } else {
         showSnackbar("Failed to process captured image.", "error");
         return;
@@ -143,17 +169,13 @@ const ConfirmReservationDialog = ({
     }
 
     try {
-      const response = await axios.post(
+      const { data } = await axios.post(
         `${config.API_URL}/confirmReservation/${currentRow.id}`,
         formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      if (response.data.success) {
+      if (data.success) {
         setReservations(
           reservations.map((reservation) =>
             reservation.id === currentRow.id
@@ -164,15 +186,13 @@ const ConfirmReservationDialog = ({
         showSnackbar("Reservation confirmed successfully.", "success");
         handleChangeRoomStatus(roomId, roomStatus);
       } else {
-        showSnackbar(
-          response.data.message || "Unexpected error occurred",
-          "error"
-        );
+        showSnackbar(data.message || "Unexpected error occurred", "error");
       }
+
       fetchReservations();
       logUserAction(
         userId,
-        `Confirm a Reservation of Guest ID: ${currentRow.guest_id}`
+        `Confirmed reservation for Guest ID: ${currentRow.guest_id}`
       );
     } catch (error) {
       console.error("Error confirming reservation:", error);
@@ -185,6 +205,7 @@ const ConfirmReservationDialog = ({
       setCapturedImage(null);
       setPreviewUrl(null);
       setFile(null);
+      setUploadedFile(null);
     }
   };
 
@@ -193,6 +214,7 @@ const ConfirmReservationDialog = ({
     setExistingImage(null);
     setFile(null);
     setPreviewUrl(null);
+    setUploadedFile(null);
     handleCloseConfirmDialog();
   };
 
@@ -212,16 +234,16 @@ const ConfirmReservationDialog = ({
                 header: null,
                 content: (
                   <Box
-                    display={"flex"}
-                    flexDirection={"column"}
-                    justifyContent={"center"}
-                    textAlign={"center"}
-                    alignItems={"center"}
+                    display="flex"
+                    flexDirection="column"
+                    justifyContent="center"
+                    textAlign="center"
+                    alignItems="center"
                   >
                     <DialogContentText>
                       {existingImage
                         ? "This guest already has an ID picture on file."
-                        : "Please capture a valid ID to confirm the reservation."}
+                        : "Please capture or upload a valid ID to confirm the reservation."}
                     </DialogContentText>
                     <Box
                       display="flex"
@@ -229,7 +251,7 @@ const ConfirmReservationDialog = ({
                       justifyContent="center"
                       alignItems="center"
                     >
-                      {existingImage ? (
+                      {existingImage && (
                         <>
                           <Typography variant="subtitle1" gutterBottom>
                             ID Picture
@@ -239,53 +261,85 @@ const ConfirmReservationDialog = ({
                             alt="Existing ID"
                             style={{
                               maxWidth: "80%",
-                              maxHeight: "150px",
+                              maxHeight: "450px",
                               marginTop: "10px",
                             }}
                           />
                         </>
-                      ) : (
-                        capturedImage && (
-                          <>
-                            <Typography variant="subtitle1" gutterBottom>
-                              ID Picture
-                            </Typography>
-                            <img
-                              src={capturedImage}
-                              alt="Captured ID"
-                              style={{
-                                maxWidth: "80%",
-                                maxHeight: "150px",
-                                marginTop: "10px",
-                              }}
+                      )}
+                      {!existingImage && (
+                        <>
+                          {uploadedFile && (
+                            <>
+                              <Typography variant="subtitle1" gutterBottom>
+                                Uploaded ID Picture
+                              </Typography>
+                              <img
+                                src={URL.createObjectURL(uploadedFile)}
+                                alt="Uploaded ID"
+                                style={{
+                                  maxWidth: "80%",
+                                  maxHeight: "450px",
+                                  marginTop: "10px",
+                                }}
+                              />
+                            </>
+                          )}
+                          {capturedImage && !uploadedFile && (
+                            <>
+                              <Typography variant="subtitle1" gutterBottom>
+                                Captured ID Picture
+                              </Typography>
+                              <img
+                                src={capturedImage}
+                                alt="Captured ID"
+                                style={{
+                                  maxWidth: "80%",
+                                  maxHeight: "450px",
+                                  marginTop: "10px",
+                                }}
+                              />
+                            </>
+                          )}
+                          {!uploadedFile && !capturedImage && (
+                            <Webcam
+                              audio={false}
+                              ref={webcamRef}
+                              screenshotFormat="image/jpeg"
+                              style={{ width: "100%", maxWidth: "450px" }}
                             />
-                            <Button
-                              onClick={recapture}
+                          )}
+                          <Box
+                            display="flex"
+                            flexDirection="column"
+                            alignItems="center"
+                            mt={2}
+                          >
+                            <ButtonGroup
+                              orientation="horizontal"
                               color="primary"
                               variant="contained"
-                              style={{ marginTop: "10px" }}
                             >
-                              Recapture
-                            </Button>
-                          </>
-                        )
-                      )}
-                      {!existingImage && !capturedImage && (
-                        <>
-                          <Webcam
-                            audio={false}
-                            ref={webcamRef}
-                            screenshotFormat="image/jpeg"
-                            style={{ width: "100%", maxWidth: "450px" }}
-                          />
-                          <Button
-                            onClick={capture}
-                            color="primary"
-                            variant="contained"
-                            style={{ marginTop: "10px" }}
-                          >
-                            Capture
-                          </Button>
+                              <Button onClick={handleCapture}>Capture</Button>
+                              <Button component="label">
+                                Upload
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  hidden
+                                  onChange={handleFileUpload}
+                                />
+                              </Button>
+                              {(capturedImage || uploadedFile) && (
+                                <Button
+                                  onClick={handleRecapture}
+                                  color="secondary"
+                                >
+                                  Recapture / Re-upload
+                                </Button>
+                              )}
+                            </ButtonGroup>
+                          </Box>
                         </>
                       )}
                     </Box>
@@ -301,8 +355,12 @@ const ConfirmReservationDialog = ({
           Cancel
         </Button>
         <Button
-          onClick={submitConfirmation}
+          onClick={handleSubmitConfirmation}
           color="primary"
+          disabled={
+            isConfirmDisabled ||
+            (!capturedImage && !uploadedFile && !existingImage)
+          }
         >
           Confirm
         </Button>

@@ -1,7 +1,13 @@
-import { useRef } from 'react';
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
-import PropTypes from 'prop-types';
-import Webcam from 'react-webcam';
+import { useRef } from "react";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+} from "@mui/material";
+import PropTypes from "prop-types";
+import Webcam from "react-webcam";
 
 const WebcamCaptureDialog = ({ open, onClose, onCapture }) => {
   const webcamRef = useRef(null);
@@ -24,8 +30,12 @@ const WebcamCaptureDialog = ({ open, onClose, onCapture }) => {
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} color="secondary">Cancel</Button>
-        <Button onClick={handleCapture} color="primary">Capture</Button>
+        <Button onClick={onClose} variant="contained" color="secondary">
+          Cancel
+        </Button>
+        <Button onClick={handleCapture} variant="contained" color="primary">
+          Capture
+        </Button>
       </DialogActions>
     </Dialog>
   );

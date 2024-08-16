@@ -5,18 +5,19 @@ import {
   Button,
   Modal,
   TextField,
-  Input,
   Typography,
   Grid,
   FormControl,
   Alert,
-  Autocomplete,
-  useTheme,
+  InputLabel,
+  Select,
+  MenuItem,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
+  useTheme,
 } from "@mui/material";
 import config from "../../../../state/config";
 import {
@@ -29,6 +30,7 @@ const RoomDetailsModal = ({
   onClose,
   room,
   roomTypes,
+  defaultRoomStatus,
   statusOptions,
   onSave,
   onDelete,
@@ -38,42 +40,44 @@ const RoomDetailsModal = ({
     room_type: "",
     rate: "",
     status: "",
+    statusID: "",
     imageUrl: "",
   });
   const theme = useTheme();
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [errors, setErrors] = useState({});
-  const [roomTypeInputValue, setRoomTypeInputValue] = useState("");
-  const [statusInputValue, setStatusInputValue] = useState("");
   const [statusColor, setStatusColor] = useState("");
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmDialogAction, setConfirmDialogAction] = useState(null);
+  const [imageModalOpen, setImageModalOpen] = useState(false); // State to manage image modal
 
   useEffect(() => {
     if (room) {
-      setFormData({
+      setFormData((prevState) => ({
+        ...prevState,
         room_number: room.room_number || "",
         room_type: room.room_type || "",
         rate: room.rate || "",
         status: room.status || "",
+        statusID: room.status_id || "",
         imageUrl: room.imageUrl || "",
-      });
+      }));
       setPreviewUrl(
         room.imageUrl ? `${config.API_URL}/assets/${room.imageUrl}` : null
       );
-      setRoomTypeInputValue(room.room_type || "");
-      setStatusInputValue(room.status || "");
       const selectedStatus = statusOptions.find(
         (status) => status.label === room.status
       );
       setStatusColor(selectedStatus ? selectedStatus.color : "");
-      console.log(
-        "Initial Status Color:",
-        selectedStatus ? selectedStatus.color : ""
-      );
     }
   }, [room, statusOptions]);
+
+  useEffect(() => {
+    if (formData.statusID) {
+      console.log("StatusID updated:", formData.statusID);
+    }
+  }, [formData.statusID]);
 
   const validate = () => {
     let tempErrors = {};
@@ -109,11 +113,6 @@ const RoomDetailsModal = ({
       updatedRoom.append("image", selectedImage);
     }
 
-    // Log FormData for debugging
-    for (let pair of updatedRoom.entries()) {
-      console.log(pair[0] + ": " + pair[1]);
-    }
-
     onSave(updatedRoom);
     handleCloseConfirmDialog();
   };
@@ -123,12 +122,9 @@ const RoomDetailsModal = ({
     setFormData((prevState) => ({ ...prevState, room_number: value }));
   };
 
-  const handleRoomTypeChange = (event, newValue) => {
-    setFormData((prevState) => ({
-      ...prevState,
-      room_type: newValue ? newValue.name : "",
-    }));
-    setRoomTypeInputValue(newValue ? newValue.name : "");
+  const handleRoomTypeChange = (event) => {
+    const { value } = event.target;
+    setFormData((prevState) => ({ ...prevState, room_type: value }));
   };
 
   const handleRateChange = (e) => {
@@ -136,23 +132,18 @@ const RoomDetailsModal = ({
     setFormData((prevState) => ({ ...prevState, rate: value }));
   };
 
-  const handleStatusChange = (event, newValue) => {
+  const handleStatusChange = (event) => {
+    const { value } = event.target;
+    const selectedStatus = statusOptions.find(
+      (status) => status.label === value
+    );
     setFormData((prevState) => ({
       ...prevState,
-      status: newValue ? newValue.label : "",
+      status: value,
+      statusID: selectedStatus ? selectedStatus.id : "",
     }));
-    setStatusInputValue(newValue ? newValue.label : "");
-    setStatusColor(newValue ? newValue.color : "");
-    console.log("Selected Status Color:", newValue ? newValue.color : "");
+    setStatusColor(selectedStatus ? selectedStatus.color : "");
   };
-
-  useEffect(() => {
-    console.log("Status Input Value:", statusInputValue);
-  }, [statusInputValue]);
-
-  useEffect(() => {
-    console.log("Status Color:", statusColor);
-  }, [statusColor]);
 
   const handleOpenConfirmDialog = (action) => {
     setConfirmDialogAction(action);
@@ -171,6 +162,14 @@ const RoomDetailsModal = ({
       onDelete(room.id);
     }
     handleCloseConfirmDialog();
+  };
+
+  const handleImageClick = () => {
+    setImageModalOpen(true); // Open the image modal when image is clicked
+  };
+
+  const handleImageModalClose = () => {
+    setImageModalOpen(false); // Close the image modal
   };
 
   return (
@@ -211,14 +210,15 @@ const RoomDetailsModal = ({
                 component="img"
                 src={previewUrl}
                 alt="Room Image Preview"
-                sx={{ width: 200, borderRadius: 1 }}
+                sx={{ width: 200, borderRadius: 1, cursor: 'pointer' }}
+                onClick={handleImageClick} // Add click event to open the modal
               />
               <Typography
                 variant="subtitle1"
                 gutterBottom
                 sx={{ color: theme.palette.primary[900] }}
               >
-                Current Image
+                Current Image (Click to enlarge)
               </Typography>
             </Box>
           )}
@@ -253,30 +253,27 @@ const RoomDetailsModal = ({
                   </Grid>
                   <Grid item xs={6}>
                     <FormControl fullWidth margin="dense">
-                      <Autocomplete
-                        key={roomTypeInputValue}
-                        options={roomTypes}
-                        getOptionLabel={(option) => option.name}
-                        value={
-                          roomTypes.find(
-                            (type) => type.name === formData.room_type
-                          ) || null
-                        }
+                      <InputLabel id="room-type-label">Room Type</InputLabel>
+                      <Select
+                        labelId="room-type-label"
+                        id="room-type-select"
+                        label="Room Type"
+                        value={formData.room_type}
                         onChange={handleRoomTypeChange}
-                        inputValue={roomTypeInputValue}
-                        onInputChange={(event, newInputValue) => {
-                          setRoomTypeInputValue(newInputValue);
-                        }}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            label="Room Type"
-                            margin="dense"
-                            error={!!errors.room_type}
-                            helperText={errors.room_type}
-                          />
-                        )}
-                      />
+                        fullWidth
+                        error={!!errors.room_type}
+                      >
+                        {roomTypes.map((type) => (
+                          <MenuItem key={type.id} value={type.name}>
+                            {type.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.room_type && (
+                        <Typography color="error">
+                          {errors.room_type}
+                        </Typography>
+                      )}
                     </FormControl>
                   </Grid>
                   <Grid item xs={6}>
@@ -294,30 +291,35 @@ const RoomDetailsModal = ({
                         },
                       }}
                     >
-                      <Autocomplete
-                        key={statusInputValue}
-                        options={statusOptions}
-                        getOptionLabel={(option) => option.label}
-                        value={
-                          statusOptions.find(
-                            (status) => status.label === formData.status
-                          ) || null
-                        }
+                      <InputLabel id="status-label">Status</InputLabel>
+                      <Select
+                        labelId="status-label"
+                        id="status-select"
+                        label="Status"
+                        value={formData.status}
                         onChange={handleStatusChange}
-                        inputValue={statusInputValue}
-                        onInputChange={(event, newInputValue) => {
-                          setStatusInputValue(newInputValue);
-                        }}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            label="Status"
-                            margin="dense"
-                            error={!!errors.status}
-                            helperText={errors.status}
-                          />
-                        )}
-                      />
+                        fullWidth
+                        error={!!errors.status}
+                        disabled={formData.statusID === defaultRoomStatus}
+                      >
+                        {statusOptions.map((status) => (
+                          <MenuItem
+                            key={status.id}
+                            value={status.label}
+                            style={{
+                              color:
+                                status.label === defaultRoomStatus
+                                  ? "gray"
+                                  : "inherit",
+                            }}
+                          >
+                            {status.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.status && (
+                        <Typography color="error">{errors.status}</Typography>
+                      )}
                     </FormControl>
                   </Grid>
                   <Grid item xs={12}>
@@ -329,11 +331,14 @@ const RoomDetailsModal = ({
                       >
                         Upload New Image
                       </Typography>
-                      <Input
-                        type="file"
-                        onChange={handleImageChange}
-                        fullWidth
-                      />
+                      <Button variant="contained" component="label" fullWidth>
+                        Upload Image
+                        <input
+                          type="file"
+                          onChange={handleImageChange}
+                          hidden
+                        />
+                      </Button>
                     </FormSectionArray>
                   </Grid>
                 </Grid>
@@ -364,7 +369,7 @@ const RoomDetailsModal = ({
               Save
             </Button>
           </Box>
-          {Object.values(errors).some((error) => error) && (
+          {Object.values(errors).some((error) => error && error !== "") && (
             <Alert severity="error" sx={{ mt: 2 }}>
               Please fix the errors above.
             </Alert>
@@ -397,6 +402,28 @@ const RoomDetailsModal = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Image Modal */}
+      <Modal open={imageModalOpen} onClose={handleImageModalClose}>
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            maxWidth: "90%",
+            maxHeight: "90%",
+            bgcolor: "background.paper",
+            boxShadow: 24,
+            p: 2,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <img src={previewUrl} alt="Room Image Full" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+        </Box>
+      </Modal>
     </>
   );
 };
@@ -409,6 +436,7 @@ RoomDetailsModal.propTypes = {
     room_type: PropTypes.string,
     rate: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     status: PropTypes.string,
+    status_id: PropTypes.number,
     imageUrl: PropTypes.string,
     id: PropTypes.number.isRequired,
   }).isRequired,
@@ -427,6 +455,7 @@ RoomDetailsModal.propTypes = {
       text_color: PropTypes.string.isRequired,
     })
   ).isRequired,
+  defaultRoomStatus: PropTypes.number.isRequired,
   onSave: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
 };

@@ -57,7 +57,7 @@ router.get("/stay_records/:stayRecordId/services", async (req, res) => {
 
   try {
     const [services] = await db.query(
-      "SELECT * FROM services WHERE stay_record_id = ?",
+      "SELECT services.*, service_list.name FROM services JOIN service_list ON services.service_list_id = service_list.id WHERE stay_record_id = ?",
       [stayRecordId]
     );
     res.json({ success: true, services });
@@ -166,5 +166,37 @@ router.delete("/service_list/:serviceId", async (req, res) => {
     });
   }
 });
+
+// Route to delete a service from a stay record
+router.delete(
+  "/stay_records/:stayRecordId/services/:serviceId",
+  async (req, res) => {
+    const { stayRecordId, serviceId } = req.params;
+
+    try {
+      const [result] = await db.query(
+        "DELETE FROM services WHERE stay_record_id = ? AND id = ?",
+        [stayRecordId, serviceId]
+      );
+
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Service not found." });
+      }
+
+      res.json({
+        success: true,
+        message: "Service deleted successfully.",
+      });
+    } catch (error) {
+      console.error("Failed to delete service:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to delete service.",
+      });
+    }
+  }
+);
 
 export default router;

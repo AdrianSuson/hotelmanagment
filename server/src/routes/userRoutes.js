@@ -42,27 +42,30 @@ router.post("/login", async (req, res) => {
     const [rows] = await db.query("SELECT * FROM users WHERE username = ?", [
       username,
     ]);
-    if (rows.length > 0) {
-      const user = rows[0];
-      const match = await bcrypt.compare(password, user.password);
-      if (match) {
-        const token = jwt.sign(
-          { id: user.id, username: user.username, role: user.role },
-          jwtSecretKey,
-          { expiresIn: "1h" }
-        );
-        res.json({
-          success: true,
-          token,
-          role: user.role,
-          userId: user.userId,
-        });
-      } else {
-        res
-          .status(401)
-          .json({ success: false, message: "Invalid credentials" });
-      }
+
+    if (rows.length === 0) {
+      // User does not exist
+      return res
+        .status(404)
+        .json({ success: false, message: "Account does not exist" });
+    }
+
+    const user = rows[0];
+    const match = await bcrypt.compare(password, user.password);
+    if (match) {
+      const token = jwt.sign(
+        { id: user.id, username: user.username, role: user.role },
+        jwtSecretKey,
+        { expiresIn: "1h" }
+      );
+      res.json({
+        success: true,
+        token,
+        role: user.role,
+        userId: user.userId,
+      });
     } else {
+      // Password does not match
       res.status(401).json({ success: false, message: "Invalid credentials" });
     }
   } catch (error) {

@@ -119,7 +119,7 @@ const CheckoutNotification = ({ showSnackbar, setStayRecords }) => {
         open={notificationOpen}
         autoHideDuration={6000}
         onClose={handleNotificationClose}
-        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        anchorOrigin={{ vertical: "top", horizontal: "right" }}
       >
         <Alert
           onClose={handleNotificationClose}

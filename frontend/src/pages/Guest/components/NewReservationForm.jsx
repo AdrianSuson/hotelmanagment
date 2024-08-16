@@ -28,6 +28,7 @@ import {
   FormSectionFunction,
 } from "../../../components/FormSection";
 
+// Validation schema for the form
 const validationSchema = (initialGuestData) =>
   yup.object({
     firstName: yup
@@ -97,7 +98,6 @@ const NewReservationForm = ({
   open,
   onClose,
   showSnackbar,
-  roomStatus,
   roomSelection,
   initialGuestData,
   logUserAction,
@@ -120,6 +120,7 @@ const NewReservationForm = ({
     }
   }, [initialGuestData]);
 
+  // Fetch available rooms
   const fetchRooms = async () => {
     try {
       const response = await axios.get(`${config.API_URL}/rooms`);
@@ -129,6 +130,7 @@ const NewReservationForm = ({
     }
   };
 
+  // Function to handle phone number formatting
   const handleNumberInputChange = (field, event) => {
     const value = event.target.value;
     formik.setFieldValue(field, formatPhoneNumber(value));
@@ -143,6 +145,7 @@ const NewReservationForm = ({
     return value;
   };
 
+  
   const formik = useFormik({
     enableReinitialize: true,
     initialValues: {
@@ -175,7 +178,6 @@ const NewReservationForm = ({
         );
         formData.append("adults", values.adults);
         formData.append("kids", values.kids);
-        formData.append("room_status", roomStatus);
         if (file) {
           formData.append("id_picture", file);
         }
@@ -192,11 +194,11 @@ const NewReservationForm = ({
 
         if (response.data.success) {
           showSnackbar("Reservation created successfully!", "success");
-          await logUserAction(
+          onClose();
+          logUserAction(
             LogUserId,
             `Created reservation for guest ID: ${initialGuestData.id}`
           );
-          onClose();
         } else {
           throw new Error(response.data.message);
         }
@@ -213,10 +215,12 @@ const NewReservationForm = ({
     },
   });
 
+  // Function to disable dates in the past
   const shouldDisableDate = (date) => {
     return dayjs(date).isBefore(dayjs(), "day");
   };
 
+  // Function to select room
   const handleSelectRoom = (roomId) => {
     formik.setFieldValue("room_id", roomId);
     const room = rooms.find((room) => room.id === roomId);
@@ -245,13 +249,13 @@ const NewReservationForm = ({
   };
 
   const handleNextReservationDetails = async () => {
-    const stayRecordDetailsErrors = await formik.validateForm();
+    const reservationDetailsErrors = await formik.validateForm();
     if (
-      !stayRecordDetailsErrors.checkInDate &&
-      !stayRecordDetailsErrors.checkOutDate &&
-      !stayRecordDetailsErrors.adults &&
-      !stayRecordDetailsErrors.kids &&
-      !stayRecordDetailsErrors.room_id
+      !reservationDetailsErrors.checkInDate &&
+      !reservationDetailsErrors.checkOutDate &&
+      !reservationDetailsErrors.adults &&
+      !reservationDetailsErrors.kids &&
+      !reservationDetailsErrors.room_id
     ) {
       setActiveStep((prevActiveStep) => prevActiveStep + 1);
     } else {
@@ -281,18 +285,21 @@ const NewReservationForm = ({
     }
   };
 
+  // Handle file input change
   const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    setFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
+    const newFile = event.target.files[0];
+    setFile(newFile);
+    setPreviewUrl(URL.createObjectURL(newFile)); // Update the preview with the new image
   };
 
+  // Handle image capture from webcam
   const handleCapture = (imageSrc) => {
-    const file = dataURLtoFile(imageSrc, "captured_id.jpg");
-    setFile(file);
+    const newFile = dataURLtoFile(imageSrc, "captured_id.jpg");
+    setFile(newFile);
     setPreviewUrl(imageSrc);
   };
 
+  // Convert data URL to file object
   const dataURLtoFile = (dataurl, filename) => {
     const arr = dataurl.split(",");
     const mime = arr[0].match(/:(.*?);/)[1];
