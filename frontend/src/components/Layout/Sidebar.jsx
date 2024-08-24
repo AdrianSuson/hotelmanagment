@@ -40,7 +40,7 @@ const adminNavItems = [
   { text: "Dashboard", icon: <HomeOutlined /> },
   { text: "Reservation", icon: <ReservationIcon /> },
   { text: "Stay Record", icon: <HotelIcon /> },
-  { text: "Guest History", icon: <GroupsIcon /> },
+  { text: "Guest Record", icon: <GroupsIcon /> },
   { text: "Transaction History", icon: <HistoryIcon /> },
 ];
 
@@ -48,7 +48,7 @@ const staffNavItems = [
   { text: "Dashboard", icon: <HomeOutlined /> },
   { text: "Reservation", icon: <ReservationIcon /> },
   { text: "Stay Record", icon: <HotelIcon /> },
-  { text: "Guest History", icon: <GroupsIcon /> },
+  { text: "Guest Record", icon: <GroupsIcon /> },
   { text: "Transaction History", icon: <HistoryIcon /> },
 ];
 

@@ -7,6 +7,7 @@ import PropTypes from "prop-types";
 import NewStayRecordForm from "../StayRecord/components/NewStayRecordForm";
 import StayRecordsTable from "./components/StayRecordTable";
 import useSnackbar from "../../components/Snackbar/useSnackbar";
+import AddIcon from "@mui/icons-material/Add";
 import CustomSnackbar from "../../components/Snackbar/CustomSnackbar";
 
 const StayRecordPage = ({
@@ -79,6 +80,7 @@ const StayRecordPage = ({
       <Grid container spacing={1} alignItems="center">
         <Grid item xs={12} display="flex" justifyContent="flex-end">
           <Button
+          startIcon={<AddIcon/>}
             variant="contained"
             color="primary"
             onClick={handleNewStayRecordDialogOpen}

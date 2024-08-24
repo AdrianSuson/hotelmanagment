@@ -149,7 +149,7 @@ function App() {
               }
             />
             <Route
-              path="/admin/guest-history"
+              path="/admin/guest-Record"
               element={
                 <Guest
                   logUserAction={logUserAction}

@@ -15,6 +15,7 @@ import RoomTable from "./components/RoomTable";
 import config from "../../state/config";
 import useSnackbar from "../../components/Snackbar/useSnackbar";
 import CustomSnackbar from "../../components/Snackbar/CustomSnackbar";
+import AddIcon from "@mui/icons-material/Add";
 
 const RoomPage = ({ logUserAction, defaultRoomStatus }) => {
   const [rooms, setRooms] = useState([]);
@@ -62,10 +63,15 @@ const RoomPage = ({ logUserAction, defaultRoomStatus }) => {
       <Box>
         <Box sx={{ mb: 1, display: "flex", justifyContent: "flex-end" }}>
           <Button
+            startIcon={<AddIcon />}
             variant="contained"
             color="primary"
             onClick={() => setOpen(true)}
-            sx={{ fontSize: isNonMediumScreens ? "1rem" : "0.8rem" }}
+            sx={{
+              fontSize: isNonMediumScreens ? "0.9rem" : "0.9rem",
+              padding: "4px 8px",
+              minWidth: "auto",
+            }}
           >
             Add Room
           </Button>
@@ -91,7 +97,7 @@ const RoomPage = ({ logUserAction, defaultRoomStatus }) => {
               onRoomAdded={handleRoomAdded}
               fetchRooms={fetchRooms}
               showSnackbar={showSnackbar}
-              onCancel={() => setOpen(false)} // Pass the onCancel prop here
+              onCancel={() => setOpen(false)}
             />
           </DialogContent>
         </Dialog>

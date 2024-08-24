@@ -109,31 +109,42 @@ const UserTable = ({
           gridColumn="span 12"
           height={isSmallScreen ? "75vh" : "60vh"}
           sx={{
-            background: "linear-gradient(135deg, #f5f7fa, #99c199)",
             boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
             borderRadius: "10px",
-            "& .MuiDataGrid-root": { border: "none", borderRadius: "10px" },
+            "& .MuiDataGrid-root": {
+              background: "linear-gradient(135deg, #F5F7FAA9, #99c199)",
+              border: "none",
+              borderRadius: "10px",
+            },
             "& .MuiDataGrid-cell": {
               backgroundColor: theme.palette.primary[200],
-              borderBottom: "none",
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
+              fontSize: "0.75rem",
             },
             "& .MuiDataGrid-columnHeaders": {
-              color: theme.palette.secondary[800],
+              background: "linear-gradient(135deg, #F5F7FAA9, #99c199)",
+              fontSize: "0.75rem",
+            },
+            "& .MuiDataGrid-columnHeaderTitle": {
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              width: "100%",
+              fontSize: "0.75rem",
             },
             "& .MuiDataGrid-footerContainer": {
-              backgroundColor: theme.palette.primary.main,
-              color: theme.palette.secondary.main,
-              borderTop: "none",
+              fontSize: "0.75rem",
+              backgroundColor: theme.palette.primary[200],
             },
             "& .MuiDataGrid-toolbarContainer .MuiButton-text": {
-              color: theme.palette.primary.main,
+              color: theme.palette.primary.dark,
+              fontSize: "0.75rem",
             },
             "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows, & .MuiTablePagination-select, & .MuiTablePagination-selectIcon":
               {
-                color: theme.palette.secondary[100],
+                fontSize: "0.75rem",
               },
           }}
         >
